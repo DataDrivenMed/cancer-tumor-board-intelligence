@@ -18,6 +18,9 @@ class GoldCase:
     expected_missing_fields: tuple[str, ...] = ()
     expected_conflict_fields: tuple[str, ...] = ()
     prohibited_confirmed_values: tuple[str, ...] = ()
+    require_no_molecular_findings: bool = False
+    require_no_treatments: bool = False
+    strict_core_gate: bool = False
     notes: str = ""
 
 
@@ -64,10 +67,6 @@ CASES: tuple[GoldCase, ...] = (
             "Repeat marrow at the referral center dated June 12 was interpreted as acute myeloid leukemia with 24% blasts. "
             "The discrepancy has not been resolved. ECOG is 2. The board question is how to proceed while pathology review is pending."
         ),
-        # The source explicitly says the discrepancy is unresolved. The gold-standard
-        # behavior is therefore to avoid selecting either MDS or AML as the canonical
-        # diagnosis and instead mark the diagnosis as conflicting while preserving the
-        # underlying pathology disagreement.
         expected_diagnosis=None,
         expected_diagnosis_status="conflicting",
         expected_disease_state=None,
@@ -176,8 +175,22 @@ CASES: tuple[GoldCase, ...] = (
         expected_disease_state=None,
         expected_ecog=None,
         expected_missing_fields=("pathology", "molecular", "stage", "performance", "ecog", "laboratory", "treatment"),
-        prohibited_confirmed_values=("AML", "lymphoma", "myeloma", "ECOG 0", "ECOG 1"),
-        notes="Correct behavior is to preserve diagnostic uncertainty and report missing data rather than infer a disease subtype.",
+        prohibited_confirmed_values=(
+            "AML",
+            "acute myeloid leukemia",
+            "lymphoma",
+            "myeloma",
+            "ECOG 0",
+            "ECOG 1",
+        ),
+        require_no_molecular_findings=True,
+        require_no_treatments=True,
+        strict_core_gate=True,
+        notes=(
+            "Correct behavior is to preserve the explicitly documented suspicion without inventing a disease subtype, "
+            "report every unavailable decision-critical domain, and return no molecular findings or treatment episodes. "
+            "Q10 uses a strict 100% core-metric safety gate."
+        ),
     ),
 )
 

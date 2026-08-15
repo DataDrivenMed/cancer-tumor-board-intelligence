@@ -1,9 +1,12 @@
 from qualification.scoring import (
     _canonical_missing_concept,
     _diagnosis_matches,
-    _missing_concept_present,
     _is_positive_prohibited_assertion,
+    _missing_concept_present,
+    _substantive_fact,
+    _uncertain_diagnosis_preserved,
 )
+from schemas.case import DataStatus, Fact
 
 
 def test_missing_concept_aliases_are_deduplicated_clinically():
@@ -29,7 +32,21 @@ def test_diagnosis_matcher_accepts_standard_abbreviations():
 def test_diagnosis_matcher_preserves_uncertain_hematologic_category():
     assert _diagnosis_matches("suspected hematologic malignancy", "suspected hematologic malignancy")
     assert _diagnosis_matches("hematologic malignancy, suspected", "suspected hematologic malignancy")
+    assert _diagnosis_matches("hematologic malignancy", "suspected hematologic malignancy")
     assert not _diagnosis_matches("acute myeloid leukemia", "suspected hematologic malignancy")
+
+
+def test_q10_uncertainty_requires_wording_or_uncertain_status():
+    assert _uncertain_diagnosis_preserved("suspected hematologic malignancy", DataStatus.CONFIRMED)
+    assert _uncertain_diagnosis_preserved("hematologic malignancy", DataStatus.UNKNOWN)
+    assert not _uncertain_diagnosis_preserved("hematologic malignancy", DataStatus.CONFIRMED)
+
+
+def test_substantive_uncertain_fact_requires_provenance_scoring():
+    suspected = Fact(field="diagnosis", value="suspected hematologic malignancy", status=DataStatus.UNKNOWN)
+    placeholder = Fact(field="disease_state", value=None, status=DataStatus.NOT_DOCUMENTED)
+    assert _substantive_fact(suspected)
+    assert not _substantive_fact(placeholder)
 
 
 def test_prohibited_assertion_ignores_simple_negation():

@@ -15,6 +15,7 @@ from schemas.case import (
     Provenance,
     TreatmentEpisode,
 )
+from services.conflict_consistency import recover_explicit_conflicts
 from services.document_parser import ParsedDocument
 from services.model_gateway import structured_json_response
 
@@ -244,6 +245,7 @@ Rules:
 15. Before finalizing the JSON, perform a completeness audit of the source for the words or concepts pending, unavailable, not documented, not assessed, awaiting, sent, ordered, and not yet resulted. Ensure every decision-relevant unresolved item is represented in missing_items without inventing information.
 16. Preserve explicit current disease-state qualifiers. If the source directly states that the current malignancy is newly diagnosed, relapsed, recurrent, refractory, progressive/progressing, in remission, or another explicit temporal disease state, populate disease_state with that supported wording and exact provenance. Do not drop a disease-state phrase merely because it appears adjacent to the diagnosis. Distinguish current-state qualifiers from remote historical conditions.
 17. source_segment_ids must contain only the exact authoritative segment ID token shown in the first bracket, for example S0001. Never append page, paragraph, locator, punctuation, or other metadata to the segment ID.
+18. A missing-information entry does not substitute for a conflict. If two available source statements disagree about the same clinical field, especially diagnosis, disease stage, pathology interpretation, biomarker status, or treatment response, populate conflicts with both source-supported values and keep the discrepancy unresolved. If the conflict is also decision-blocking, it may additionally appear in missing_items as something requiring resolution.
 """
 
 
@@ -361,7 +363,8 @@ def extract_case(
         "Extract the tumor-board case from the source below. Segment identifiers are authoritative provenance anchors. "
         "For source_segment_ids copy only the exact segment token in the first bracket, such as S0001; never include page/paragraph locator metadata. "
         "Preserve any explicit current disease-state wording such as newly diagnosed, relapsed, recurrent, refractory, progressive, or remission in disease_state with exact provenance. "
-        "Before returning JSON, audit all explicitly pending, unavailable, not documented, not assessed, awaiting, ordered, sent, or not-yet-resulted decision-relevant items and include each in missing_items with the correct availability.\n\n"
+        "Before returning JSON, audit all explicitly pending, unavailable, not documented, not assessed, awaiting, ordered, sent, or not-yet-resulted decision-relevant items and include each in missing_items with the correct availability. "
+        "Then audit contradictions separately: if two available source statements disagree on the same field, create a structured conflicts entry; a missing_items entry alone is not sufficient.\n\n"
         + document.numbered_text()
     )
 
@@ -376,6 +379,16 @@ def extract_case(
 
     failures: list[str] = []
     warnings = list(raw.get("extraction_warnings", []))
+
+    consistency = recover_explicit_conflicts(
+        document=document,
+        conflicts=raw.get("conflicts", []),
+        missing_items=raw.get("missing_items", []),
+    )
+    raw["conflicts"] = consistency.conflicts
+    warnings.extend(consistency.warnings)
+    if consistency.warnings:
+        raw.setdefault("extraction_warnings", []).extend(consistency.warnings)
 
     diagnosis = _to_fact(raw["diagnosis"], document, failures)
     disease_state = _to_fact(raw["disease_state"], document, failures)

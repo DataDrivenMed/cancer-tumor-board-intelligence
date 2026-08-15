@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# Deployment marker: v2.1 import surface verified on main after schema synchronization.
 import json
 import os
 import sys
@@ -139,8 +140,6 @@ def _run_cases(cases, stream_name: str, model_token: str | None, model_name: str
         completed=failure is None and len(scores) == len(cases),
         failure=failure,
     )
-    # Stamp the page-initialized protocol again immediately before formal
-    # validation so completed inference cannot be lost to metadata drift.
     payload["protocol"] = protocol
     st.session_state.remediation_v21_latest_payload = payload
 
@@ -327,31 +326,30 @@ st.divider()
 st.subheader("Phase 2 • Frozen repeated subset")
 st.write(
     "Six cases were selected before inference for repeated testing: disease-state promotion, treatment completeness, uncertainty handling, and conflict-preserving abstention. "
-    "Each is executed three times under the same configuration."
+    "Run them only after the baseline has completed without a safety stop."
 )
 if summary["safety_stop"]:
-    st.error("Repeated testing is locked by the protocol safety stop.")
+    st.error("Repeat testing is locked by the protocol safety stop.")
 elif study.get("baseline_run") is None:
-    st.info("Complete and review the 12-case baseline before starting repeated testing.")
+    st.info("Complete the fresh baseline first.")
 elif summary["repeat_runs_completed"] >= REMEDIATION_REPEAT_COUNT:
-    st.success("Remediation Validation v2.1 is complete.")
+    st.success("All repeated-subset runs are complete.")
 else:
     subset = tuple(get_remediation_case(case_id) for case_id in REMEDIATION_REPEAT_CASE_IDS)
     next_repeat = summary["repeat_runs_completed"] + 1
-    ack = st.checkbox(
-        f"I understand repeat {next_repeat} contains {len(subset)} frozen case executions and treatment-rich cases may invoke a bounded second model pass.",
+    ack_repeat = st.checkbox(
+        f"I understand repeat {next_repeat} makes {len(subset)} case executions and must use the unchanged frozen configuration.",
         key=f"remediation_repeat_ack_{next_repeat}",
     )
     if st.button(
-        f"Run remediation repeat {next_repeat} of {REMEDIATION_REPEAT_COUNT}",
+        f"Run repeated subset {next_repeat} of {REMEDIATION_REPEAT_COUNT}",
         type="primary",
-        disabled=not ack,
+        disabled=not ack_repeat,
     ):
         _run_cases(subset, "repeat", model_token, model_name, reasoning_effort)
 
 st.divider()
-st.markdown("### Audit policy")
+st.markdown("### Interpretation policy")
 st.write(
-    "Every v2.1 diagnostic archive stores the immutable raw model output separately from the normalized extraction, records normalization events with before/after values and reasons, and records whether the independent treatment-completeness pass ran and whether it added source-verified episodes. "
-    "A repaired result is therefore never silently substituted for the model's original output."
+    "This is a synthetic remediation qualification study, not clinical validation. A GREEN result supports that the identified v2.0 extraction failure classes were not reproduced in this frozen v2.1 test set under the fixed model configuration. It does not establish real-world clinical safety, generalization to unseen institutions, or suitability for autonomous decision-making."
 )

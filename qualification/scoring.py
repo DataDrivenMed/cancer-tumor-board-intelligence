@@ -23,6 +23,92 @@ def _any_term(texts: Iterable[str], term: str) -> bool:
     return any(t in _norm(x) for x in texts)
 
 
+# Missing-data scoring is concept based, not literal-token based. This prevents
+# double-counting synonyms such as ECOG/performance status or creatinine/renal
+# function as separate clinical omissions.
+_MISSING_ALIASES: dict[str, tuple[str, ...]] = {
+    "performance": ("performance", "ecog", "performance status"),
+    "renal": ("renal", "creatinine", "kidney", "egfr"),
+    "laboratory": ("laboratory", "laboratories", "lab", "labs"),
+    "molecular": ("molecular", "genomic", "sequencing"),
+    "cytogenetic": ("cytogenetic", "cytogenetics", "karyotype", "fish"),
+    "pathology": ("pathology", "pathologic", "biopsy", "marrow"),
+    "stage": ("stage", "staging"),
+    "treatment": ("treatment", "therapy", "regimen"),
+    "flt3": ("flt3",),
+}
+
+
+def _canonical_missing_concept(term: str) -> str:
+    t = _norm(term)
+    for concept, aliases in _MISSING_ALIASES.items():
+        if t == concept or t in {_norm(a) for a in aliases}:
+            return concept
+    return t
+
+
+def _missing_concept_present(texts: Iterable[str], concept: str) -> bool:
+    aliases = _MISSING_ALIASES.get(concept, (concept,))
+    return any(_any_term(texts, alias) for alias in aliases)
+
+
+def _assertion_texts(package: ExtractionPackage) -> list[str]:
+    """Return model assertions only, excluding provenance excerpts and source text.
+
+    The benchmark must not mark a prohibited phrase as a hallucination merely
+    because the phrase appears in a quoted source excerpt, a missing-data reason,
+    or a warning. Only structured extracted values/interpretations are inspected.
+    """
+    case = package.case
+    texts: list[str] = []
+
+    facts = [case.diagnosis, case.disease_state]
+    if case.performance_status is not None:
+        facts.append(case.performance_status)
+    facts += list(case.pathology) + list(case.imaging) + list(case.labs) + list(case.comorbidities)
+    facts += list(case.toxicities) + list(case.transplant_cellular_therapy) + list(case.current_medications)
+    for fact in facts:
+        if getattr(fact.status, "value", fact.status) == "confirmed" and fact.value is not None:
+            texts.append(str(fact.value))
+
+    for item in case.molecular_findings:
+        texts.extend(
+            str(value)
+            for value in [
+                item.gene,
+                item.alteration_type,
+                item.hgvs_c,
+                item.hgvs_p,
+                item.laboratory_interpretation,
+            ]
+            if value
+        )
+
+    for treatment in case.treatments:
+        texts.append(treatment.regimen)
+        texts.extend(treatment.agents)
+        if treatment.best_response:
+            texts.append(treatment.best_response)
+        if treatment.reason_stopped:
+            texts.append(treatment.reason_stopped)
+
+    return texts
+
+
+def _is_positive_prohibited_assertion(text: str, phrase: str) -> bool:
+    hay = _norm(text)
+    needle = _norm(phrase)
+    if needle not in hay:
+        return False
+
+    # Simple negation protection for structured interpretations such as
+    # "does not predict sensitivity". This is intentionally conservative.
+    idx = hay.find(needle)
+    prefix = hay[max(0, idx - 30):idx]
+    negators = ("no ", "not ", "does not ", "did not ", "without ", "not established ")
+    return not any(neg in prefix for neg in negators)
+
+
 @dataclass
 class QualificationScore:
     case_id: str
@@ -69,8 +155,12 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
 
     missing_texts = [f"{m.field} {m.reason} {m.availability}" for m in case.missing_items]
     if gold.expected_missing_fields:
-        hits = sum(1 for term in gold.expected_missing_fields if _any_term(missing_texts, term))
-        missing_information_recall = hits / len(gold.expected_missing_fields)
+        expected_concepts = sorted({_canonical_missing_concept(term) for term in gold.expected_missing_fields})
+        matched = [concept for concept in expected_concepts if _missing_concept_present(missing_texts, concept)]
+        unmatched = [concept for concept in expected_concepts if concept not in matched]
+        missing_information_recall = len(matched) / len(expected_concepts)
+        if unmatched:
+            notes.append("Missing-information concepts not detected: " + ", ".join(unmatched))
     else:
         missing_information_recall = 1.0
 
@@ -78,6 +168,9 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     if gold.expected_conflict_fields:
         hits = sum(1 for term in gold.expected_conflict_fields if _any_term(conflict_texts, term))
         conflict_detection = hits / len(gold.expected_conflict_fields)
+        missed_conflicts = [term for term in gold.expected_conflict_fields if not _any_term(conflict_texts, term)]
+        if missed_conflicts:
+            notes.append("Expected conflict concepts not detected: " + ", ".join(missed_conflicts))
     else:
         conflict_detection = 1.0
 
@@ -95,10 +188,14 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
         treatment_coverage = 1.0
         treatment_order_accuracy = 1.0
 
-    raw_text = _norm(package.raw_extraction)
-    prohibited_assertions = sum(1 for phrase in gold.prohibited_confirmed_values if _norm(phrase) in raw_text)
-    if prohibited_assertions:
-        notes.append(f"Detected {prohibited_assertions} prohibited/inferred assertion(s) requiring review.")
+    assertion_texts = _assertion_texts(package)
+    prohibited_hits: list[str] = []
+    for phrase in gold.prohibited_confirmed_values:
+        if any(_is_positive_prohibited_assertion(text, phrase) for text in assertion_texts):
+            prohibited_hits.append(phrase)
+    prohibited_assertions = len(prohibited_hits)
+    if prohibited_hits:
+        notes.append("Detected prohibited/inferred assertion(s): " + ", ".join(prohibited_hits))
 
     confirmed_with_prov = 0
     failed_confirmed_prov = 0

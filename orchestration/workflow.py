@@ -6,6 +6,7 @@ from services.audit import audit_event
 from services.quality import inspect_case
 from services.semantic_integrity import inspect_semantic_integrity, semantic_integrity_passes
 from orchestration.router import route_case
+from agents.case_integrity import run_case_integrity
 from agents.mock_agents import (
     GuidelineMockAgent,
     MolecularMockAgent,
@@ -62,6 +63,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
                 if f.severity in {"error", "critical"}
             ],
             "semantic_integrity_findings": semantic_findings,
+            "case_integrity_report": None,
             "final_decision": final,
             "audit_events": audit,
         }
@@ -71,21 +73,41 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
     case.missing_items = missing
     audit.append(audit_event("quality_check_complete", f"{len(conflicts)} conflicts; {len(missing)} missing items"))
 
-    if any(c.severity == "critical" and c.resolution_status == "unresolved" for c in conflicts):
+    integrity_report = run_case_integrity(case)
+    audit.append(
+        audit_event(
+            "case_integrity_check_complete",
+            f"disposition={integrity_report.disposition.value}; findings={len(integrity_report.findings)}; "
+            f"safe_to_route={integrity_report.safe_to_route_to_specialists}",
+        )
+    )
+    if not integrity_report.safe_to_route_to_specialists:
         final = FinalDecision(
             decision_state="abstain",
             decision_support_strength="insufficient",
-            abstention_reason="Critical unresolved case conflict.",
-            discussion_priorities=["Resolve critical source conflict before treatment ranking."],
+            abstention_reason="Canonical case failed the deterministic Case Integrity / Data QA routing gate.",
+            discussion_priorities=[
+                "Resolve recommendation-blocking data-quality findings before specialist-agent routing."
+            ],
         )
-        audit.append(audit_event("workflow_abstained", "Critical unresolved conflict"))
+        audit.append(audit_event("workflow_abstained", "Case Integrity / Data QA gate blocked routing"))
         return {
             "case": case,
             "routing": None,
             "specialist_outputs": {},
             "preliminary_synthesis": "",
-            "red_team_findings": [],
+            "red_team_findings": [
+                RedTeamFinding(
+                    severity="critical" if f.recommendation_blocking else "major",
+                    category=f"case_integrity:{f.category}",
+                    issue=f.message,
+                    effect_on_recommendation="Downstream specialist reasoning is blocked until the case representation is corrected or reviewed.",
+                )
+                for f in integrity_report.findings
+                if f.recommendation_blocking
+            ],
             "semantic_integrity_findings": semantic_findings,
+            "case_integrity_report": integrity_report,
             "final_decision": final,
             "audit_events": audit,
         }
@@ -134,6 +156,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
         "preliminary_synthesis": preliminary,
         "red_team_findings": red_team,
         "semantic_integrity_findings": semantic_findings,
+        "case_integrity_report": integrity_report,
         "final_decision": final,
         "audit_events": audit,
     }

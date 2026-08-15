@@ -28,6 +28,12 @@ class ParsedDocument:
         return "\n\n".join(segment.text for segment in self.segments)
 
     def numbered_text(self) -> str:
+        """Render source text while keeping the authoritative segment ID visually distinct.
+
+        The model must copy only values such as ``S0001`` into source_segment_ids.
+        Page/paragraph locators are useful display metadata, but they are deliberately
+        outside the segment-ID brackets so they cannot be mistaken for part of the ID.
+        """
         rows: list[str] = []
         for segment in self.segments:
             locator = []
@@ -35,8 +41,8 @@ class ParsedDocument:
                 locator.append(f"page={segment.page}")
             if segment.paragraph is not None:
                 locator.append(f"paragraph={segment.paragraph}")
-            suffix = f"|{'|'.join(locator)}" if locator else ""
-            rows.append(f"[{segment.segment_id}{suffix}] {segment.text}")
+            locator_text = f" [{' | '.join(locator)}]" if locator else ""
+            rows.append(f"[{segment.segment_id}]{locator_text} {segment.text}")
         return "\n".join(rows)
 
 

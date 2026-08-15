@@ -5,11 +5,12 @@ from schemas.case import CancerTumorBoardCase
 from services.audit import audit_event
 from services.quality import inspect_case
 from services.semantic_integrity import inspect_semantic_integrity, semantic_integrity_passes
+from services.guideline_sources import PRODUCTION_GUIDELINE_STORE
 from orchestration.router import route_case
 from agents.case_integrity import run_case_integrity
 from agents.missing_information import run_missing_information
+from agents.guideline import GuidelineAgent
 from agents.mock_agents import (
-    GuidelineMockAgent,
     MolecularMockAgent,
     TranslationalMockAgent,
     LiteratureMockAgent,
@@ -19,7 +20,7 @@ from agents.mock_agents import (
 
 
 AGENT_REGISTRY = {
-    "guideline": GuidelineMockAgent(),
+    "guideline": GuidelineAgent(PRODUCTION_GUIDELINE_STORE),
     "molecular": MolecularMockAgent(),
     "translational": TranslationalMockAgent(),
     "literature": LiteratureMockAgent(),
@@ -165,19 +166,22 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
     for agent_id in routing.selected_agents:
         output = AGENT_REGISTRY[agent_id].run(case)
         specialist_outputs[agent_id] = output
-        audit.append(audit_event("agent_complete", agent_id))
+        status = getattr(output, "status", "unknown")
+        if hasattr(status, "value"):
+            status = status.value
+        audit.append(audit_event("agent_complete", f"{agent_id}; status={status}"))
 
     preliminary = (
-        "Skeleton synthesis only. The application has successfully routed the case "
-        "through independent specialist placeholders. No clinical recommendation "
-        "is generated until validated evidence connectors and model contracts are enabled."
+        "Skeleton synthesis only. The application has routed the case through specialist contracts. "
+        "The Guideline Agent now enforces verified-source evidence boundaries, but no authorized "
+        "production guideline content is bundled by default. Other specialist agents remain placeholders."
     )
 
     red_team = [
         RedTeamFinding(
             severity="critical",
             category="evidence_unavailable",
-            issue="No live clinical evidence sources are connected in the skeleton build.",
+            issue="The complete validated evidence stack is not yet connected for all specialist agents.",
             effect_on_recommendation="Final clinical recommendation must be withheld.",
         )
     ]
@@ -185,12 +189,12 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
     final = FinalDecision(
         decision_state="abstain",
         decision_support_strength="insufficient",
-        abstention_reason="The skeleton build has no validated evidence connectors and therefore cannot support a clinical recommendation.",
+        abstention_reason="The current build does not yet have a complete validated evidence stack and therefore cannot support a clinical recommendation.",
         major_uncertainties=[item.field for item in missing_report.items if item.priority.value in {"high", "critical"}],
         discussion_priorities=[
             "Verify the structured patient facts.",
             "Resolve any decision-critical missing information.",
-            "Connect and validate authoritative evidence sources before activating clinical recommendation logic.",
+            "Connect, authorize, and validate the evidence sources required by each selected specialist agent before activating recommendation logic.",
         ],
     )
     audit.append(audit_event("workflow_complete", final.decision_state))

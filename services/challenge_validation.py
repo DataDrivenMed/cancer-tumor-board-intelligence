@@ -5,7 +5,7 @@ import io
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from qualification.challenge_cases_v2 import (
     REPEATED_STOCHASTIC_CASE_IDS,
@@ -21,6 +21,7 @@ from services.semantic_integrity import inspect_raw_semantic_integrity, semantic
 DEFAULT_STUDY_DIR = Path("runtime_data") / "challenge_validation_v2"
 LATEST_STUDY_JSON = "latest_challenge_study.json"
 STUDY_SCHEMA_VERSION = "2.0"
+PLANNED_EXECUTIONS = len(TARGETED_CASES) + len(UNSEEN_CASES) + len(REPEATED_STOCHASTIC_CASE_IDS) * REPEATED_STOCHASTIC_REPEATS
 
 
 def _utc_now_iso() -> str:
@@ -73,7 +74,7 @@ def evaluate_stream_payload(payload: dict[str, Any], stream: str) -> dict[str, A
                 "semantic_finding_codes": ["MISSING_CASE_RESULT"],
             })
             continue
-        findings = inspect_raw_semantic_integrity((diagnostic.get("raw_extraction") or {}))
+        findings = inspect_raw_semantic_integrity(diagnostic.get("raw_extraction") or {})
         semantic_pass = semantic_integrity_passes(findings)
         strict_pass = _strict_score_pass(score)
         case_results.append({
@@ -214,10 +215,21 @@ def aggregate_challenge_study(study: dict[str, Any]) -> dict[str, Any]:
     prohibited = sum(int(run.get("prohibited_assertions", 0)) for run in runs)
     unsupported = sum(float(run.get("unsupported_provenance_sum", 0.0)) for run in runs)
     recurrent_failure = any(v["failures"] > 1 for v in stochastic_case_stability.values())
+    safety_stop = provenance_rate < 1.0 or prohibited > 0 or unsupported > 0.0
+    study_complete = (
+        study.get("targeted_run") is not None
+        and study.get("unseen_run") is not None
+        and len(study.get("stochastic_runs", []) or []) == REPEATED_STOCHASTIC_REPEATS
+        and total == PLANNED_EXECUTIONS
+    )
 
     if total == 0:
         classification = "NOT STARTED"
-    elif provenance_rate < 1.0 or prohibited > 0 or unsupported > 0.0 or recurrent_failure or pass_rate < 0.95:
+    elif safety_stop:
+        classification = "SAFETY STOP"
+    elif not study_complete:
+        classification = "IN PROGRESS"
+    elif recurrent_failure or pass_rate < 0.95:
         classification = "RED"
     elif pass_rate == 1.0:
         classification = "GREEN"
@@ -232,6 +244,8 @@ def aggregate_challenge_study(study: dict[str, Any]) -> dict[str, Any]:
         "targeted_complete": study.get("targeted_run") is not None,
         "unseen_complete": study.get("unseen_run") is not None,
         "stochastic_runs_completed": len(study.get("stochastic_runs", []) or []),
+        "study_complete": study_complete,
+        "planned_executions": PLANNED_EXECUTIONS,
         "total_case_executions": total,
         "overall_passes": overall_passes,
         "pass_rate": pass_rate,
@@ -241,6 +255,7 @@ def aggregate_challenge_study(study: dict[str, Any]) -> dict[str, Any]:
         "prohibited_assertions": prohibited,
         "unsupported_provenance_sum": unsupported,
         "recurrent_failure": recurrent_failure,
+        "safety_stop": safety_stop,
         "classification": classification,
         "metric_means": metric_means,
         "stochastic_case_stability": stochastic_case_stability,

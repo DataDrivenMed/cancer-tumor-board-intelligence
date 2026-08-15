@@ -1,0 +1,11 @@
+SYNTHETIC CASE FOR DEVELOPMENT ONLY
+
+A 68-year-old woman is being presented for hematologic malignancy tumor board review with relapsed acute myeloid leukemia. ECOG performance status is 1.
+
+Initial therapy consisted of synthetic induction regimen A with Agent A and Agent B, after which she achieved a complete remission. She later received synthetic salvage regimen B containing Agent C; the best documented response was partial response and therapy was stopped for progression.
+
+A synthetic bone marrow molecular report states: FLT3 internal tandem duplication (FLT3-ITD) detected with variant allele frequency 31%. The laboratory classified the finding as pathogenic. The specimen was bone marrow and the assay was a synthetic NGS panel.
+
+The current tumor-board question is: What treatment strategies should be considered for tumor-board discussion in the setting of relapsed AML with FLT3-ITD?
+
+This synthetic narrative intentionally does not document current renal function, hepatic function, CBC values, current medications, transplant history, or detailed cardiac function. No real patient information is included.

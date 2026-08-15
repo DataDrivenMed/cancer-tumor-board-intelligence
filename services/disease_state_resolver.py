@@ -9,7 +9,7 @@ from services.document_parser import ParsedDocument
 from services.extraction_audit import NormalizationEvent, make_normalization_event
 
 
-DISEASE_STATE_RESOLVER_VERSION = "1.2.0"
+DISEASE_STATE_RESOLVER_VERSION = "1.3.0"
 
 
 _PLACEHOLDER_STATUSES = {
@@ -71,8 +71,6 @@ _DIAGNOSIS_GENERIC_TOKENS = {
     "stage",
 }
 
-# Ordered only for deterministic reporting. We never choose among multiple distinct
-# candidate states; ambiguity is preserved instead of adjudicated.
 _STATE_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ("newly diagnosed", re.compile(r"\bnewly[- ]diagnosed\b", re.I), "observed"),
     ("relapsed", re.compile(r"\brelaps(?:e|ed)\b", re.I), "observed"),
@@ -127,7 +125,6 @@ def _is_uncertain_or_negated(text: str, start: int, end: int) -> bool:
     context = _window(text, start, end)
     if any(marker in context for marker in _NEGATION_MARKERS):
         return True
-
     local_left = text[max(0, start - 35):start].lower()
     local_right = text[end:min(len(text), end + 20)].lower()
     local = local_left + text[start:end].lower() + local_right
@@ -144,23 +141,26 @@ def _diagnosis_anchor_tokens(payload: dict[str, Any]) -> set[str]:
     }
 
 
+def _sentence_context(text: str, start: int, end: int) -> str:
+    left_candidates = [text.rfind(mark, 0, start) for mark in (".", "?", "!", "\n")]
+    left = max(left_candidates) + 1
+    right_candidates = [position for mark in (".", "?", "!", "\n") if (position := text.find(mark, end)) >= 0]
+    right = min(right_candidates) if right_candidates else len(text)
+    return text[left:right].lower()
+
+
 def _match_is_current_diagnosis_context(
     text: str,
     start: int,
     end: int,
     diagnosis_tokens: set[str],
-    radius: int = 80,
 ) -> bool:
-    """Require candidate state wording to be locally tied to the current diagnosis.
+    """Require current diagnosis evidence in the same sentence as the state phrase."""
 
-    Segment-wide anchoring is intentionally insufficient because a single source
-    segment can contain both a remote historical malignancy and the current tumor.
-    """
-
-    local = text[max(0, start - radius): min(len(text), end + radius)].lower()
-    if any(marker in local for marker in _CURRENT_CONTEXT_MARKERS):
+    sentence = _sentence_context(text, start, end)
+    if any(marker in sentence for marker in _CURRENT_CONTEXT_MARKERS):
         return True
-    return bool(diagnosis_tokens and any(token in local for token in diagnosis_tokens))
+    return bool(diagnosis_tokens and any(token in sentence for token in diagnosis_tokens))
 
 
 def _candidate_states(document: ParsedDocument, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -170,12 +170,7 @@ def _candidate_states(document: ParsedDocument, payload: dict[str, Any]) -> list
         text = segment.text
         for canonical, pattern, information_type in _STATE_PATTERNS:
             for match in pattern.finditer(text):
-                if not _match_is_current_diagnosis_context(
-                    text,
-                    match.start(),
-                    match.end(),
-                    diagnosis_tokens,
-                ):
+                if not _match_is_current_diagnosis_context(text, match.start(), match.end(), diagnosis_tokens):
                     continue
                 if _is_uncertain_or_negated(text, match.start(), match.end()):
                     continue
@@ -195,14 +190,7 @@ def resolve_disease_state(
     document: ParsedDocument,
     payload: dict[str, Any],
 ) -> DiseaseStateResolution:
-    """Promote only explicit, unambiguous source-supported current disease-state evidence.
-
-    The resolver never overwrites a substantive model disease state, never
-    adjudicates a conflict, and never uses external medical knowledge. Candidate
-    phrases must be locally anchored to the extracted current diagnosis or an
-    explicit current-context phrase. This prevents remote historical disease from
-    leaking into the canonical current state.
-    """
+    """Promote only explicit, unambiguous, current source-supported disease state."""
 
     out = deepcopy(payload)
     events: list[NormalizationEvent] = []

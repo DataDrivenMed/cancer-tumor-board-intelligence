@@ -69,8 +69,10 @@ def inspect_semantic_integrity(
     findings: list[SemanticIntegrityFinding] = []
     raw = raw_extraction or {}
 
-    raw_care_site = raw.get("care_site")
-    if _looks_like_serialized_json_object(raw_care_site):
+    # Check both the raw model output and the canonical case so this guard remains
+    # active even when callers no longer retain raw_extraction.
+    care_site_values = [raw.get("care_site"), case.care_site]
+    if any(_looks_like_serialized_json_object(value) for value in care_site_values):
         findings.append(
             SemanticIntegrityFinding(
                 code="SERIALIZED_JSON_IN_SCALAR",

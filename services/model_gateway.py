@@ -12,41 +12,64 @@ class ModelGatewayError(RuntimeError):
 
 def structured_json_response(
     *,
-    api_key: str,
+    base_url: str,
+    auth_token: str | None,
     model: str,
     system_instructions: str,
     user_input: str,
     schema_name: str,
     json_schema: dict[str, Any],
+    reasoning_effort: str = "high",
 ) -> dict[str, Any]:
-    """Call the OpenAI Responses API with Structured Outputs.
+    """Call an OpenAI-compatible inference endpoint with JSON-schema output.
 
-    The gateway is intentionally small so another provider can be substituted later
-    without changing the clinical extraction contract.
+    This gateway is provider-neutral. It can point to Hugging Face Inference
+    Providers, Groq, Fireworks, Together, a self-hosted vLLM server, or another
+    OpenAI-compatible endpoint. The application therefore does not depend on
+    the OpenAI API or on any specific commercial model host.
+
+    For local/self-hosted endpoints that do not require authentication, a
+    harmless placeholder token is supplied only because the OpenAI Python
+    client expects a non-empty api_key value.
     """
-    if not api_key:
-        raise ModelGatewayError("OPENAI_API_KEY is not configured.")
+    if not base_url:
+        raise ModelGatewayError("MODEL_BASE_URL is not configured.")
+    if not model:
+        raise ModelGatewayError("MODEL_NAME is not configured.")
+
+    client = OpenAI(
+        base_url=base_url.rstrip("/"),
+        api_key=auth_token or "local-no-auth",
+    )
+
+    request: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_instructions},
+            {"role": "user", "content": user_input},
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name,
+                "strict": True,
+                "schema": json_schema,
+            },
+        },
+    }
+
+    if reasoning_effort:
+        request["reasoning_effort"] = reasoning_effort
 
     try:
-        client = OpenAI(api_key=api_key)
-        response = client.responses.create(
-            model=model,
-            instructions=system_instructions,
-            input=user_input,
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": schema_name,
-                    "strict": True,
-                    "schema": json_schema,
-                }
-            },
-            store=False,
-        )
-        if not response.output_text:
+        response = client.chat.completions.create(**request)
+        content = response.choices[0].message.content
+        if not content:
             raise ModelGatewayError("The model returned no structured output.")
-        return json.loads(response.output_text)
+        return json.loads(content)
     except ModelGatewayError:
         raise
     except Exception as exc:
-        raise ModelGatewayError(f"Structured extraction request failed: {exc}") from exc
+        raise ModelGatewayError(
+            f"Structured extraction request failed through the configured model endpoint: {exc}"
+        ) from exc

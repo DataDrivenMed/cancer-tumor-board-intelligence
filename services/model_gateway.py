@@ -6,6 +6,8 @@ from typing import Any
 
 from openai import OpenAI
 
+from services.extraction_normalization import normalize_structured_output
+
 
 class ModelGatewayError(RuntimeError):
     pass
@@ -35,6 +37,11 @@ def structured_json_response(
 
     `api_key` remains as a compatibility alias for older callers. It is not
     specific to the OpenAI API and may contain a Hugging Face/provider token.
+
+    Returned structured output passes through a deterministic schema-aware
+    normalization hook before downstream case reconstruction. The extraction
+    normalization layer repairs narrow representation defects only and does not
+    infer clinical facts.
     """
     endpoint = base_url or os.getenv("MODEL_BASE_URL") or DEFAULT_HF_ROUTER
     token = auth_token or api_key or os.getenv("MODEL_AUTH_TOKEN") or os.getenv("HF_TOKEN")
@@ -75,7 +82,10 @@ def structured_json_response(
         content = response.choices[0].message.content
         if not content:
             raise ModelGatewayError("The model returned no structured output.")
-        return json.loads(content)
+        parsed = json.loads(content)
+        if not isinstance(parsed, dict):
+            raise ModelGatewayError("The model returned structured output with a non-object top level.")
+        return normalize_structured_output(schema_name, parsed)
     except ModelGatewayError:
         raise
     except Exception as exc:

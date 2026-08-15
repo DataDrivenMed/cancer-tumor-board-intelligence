@@ -26,6 +26,12 @@ def test_diagnosis_matcher_accepts_standard_abbreviations():
     assert not _diagnosis_matches("multiple myeloma", "AML")
 
 
+def test_diagnosis_matcher_preserves_uncertain_hematologic_category():
+    assert _diagnosis_matches("suspected hematologic malignancy", "suspected hematologic malignancy")
+    assert _diagnosis_matches("hematologic malignancy, suspected", "suspected hematologic malignancy")
+    assert not _diagnosis_matches("acute myeloid leukemia", "suspected hematologic malignancy")
+
+
 def test_prohibited_assertion_ignores_simple_negation():
     assert not _is_positive_prohibited_assertion(
         "the report does not predict sensitivity to a specific therapy",

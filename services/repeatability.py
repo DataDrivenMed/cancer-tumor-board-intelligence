@@ -78,7 +78,7 @@ def evaluate_benchmark_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "reasoning_effort": payload.get("reasoning_effort"),
         "completed": bool(payload.get("completed")),
         "failure": payload.get("failure"),
-        "protocol": payload.get("protocol") or protocol_metadata(),
+        "protocol": payload.get("protocol") or {},
         "scores": payload.get("scores", []),
         "diagnostics": payload.get("diagnostics", {}),
         "case_results": case_results,
@@ -101,7 +101,9 @@ def validate_repeatability_run(run: dict[str, Any], current_protocol: dict[str, 
     run_protocol = run.get("protocol") or {}
     run_fingerprint = run_protocol.get("suite_fingerprint")
     current_fingerprint = current_protocol.get("suite_fingerprint")
-    if run_fingerprint and run_fingerprint != current_fingerprint:
+    if not run_fingerprint:
+        errors.append("Run has no frozen-suite fingerprint and cannot be counted in the formal repeatability study.")
+    elif run_fingerprint != current_fingerprint:
         errors.append("Suite fingerprint differs from the frozen Qualification Suite v1.0 fingerprint.")
     return errors
 
@@ -130,6 +132,8 @@ def add_run(study: dict[str, Any], benchmark_payload: dict[str, Any]) -> dict[st
         raise ValueError("Reasoning effort changed during the repeatability study; start a separate study.")
 
     run_key = evaluated.get("run_timestamp_utc")
+    if not run_key:
+        raise ValueError("Run timestamp is missing; the run cannot be uniquely tracked.")
     existing_keys = {run.get("run_timestamp_utc") for run in study.get("runs", [])}
     if run_key in existing_keys:
         return study
@@ -189,7 +193,16 @@ def aggregate_study(study: dict[str, Any]) -> dict[str, Any]:
 
 def study_to_case_csv(study: dict[str, Any]) -> str:
     stream = io.StringIO()
-    fields = ["run", "run_timestamp_utc", "case_id", "extraction_pass", "semantic_pass", "overall_pass", "semantic_error_count", "semantic_finding_codes"]
+    fields = [
+        "run",
+        "run_timestamp_utc",
+        "case_id",
+        "extraction_pass",
+        "semantic_pass",
+        "overall_pass",
+        "semantic_error_count",
+        "semantic_finding_codes",
+    ]
     writer = csv.DictWriter(stream, fieldnames=fields)
     writer.writeheader()
     for run_index, run in enumerate(study.get("runs", []), start=1):

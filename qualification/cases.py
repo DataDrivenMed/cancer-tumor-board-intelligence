@@ -9,9 +9,10 @@ class GoldCase:
     title: str
     target_failure_mode: str
     narrative: str
-    expected_diagnosis: str
+    expected_diagnosis: str | None
     expected_disease_state: str | None
     expected_ecog: str | None
+    expected_diagnosis_status: str | None = None
     expected_molecular_genes: tuple[str, ...] = ()
     expected_treatments: tuple[str, ...] = ()
     expected_missing_fields: tuple[str, ...] = ()
@@ -63,10 +64,16 @@ CASES: tuple[GoldCase, ...] = (
             "Repeat marrow at the referral center dated June 12 was interpreted as acute myeloid leukemia with 24% blasts. "
             "The discrepancy has not been resolved. ECOG is 2. The board question is how to proceed while pathology review is pending."
         ),
-        expected_diagnosis="acute myeloid leukemia",
+        # The source explicitly says the discrepancy is unresolved. The gold-standard
+        # behavior is therefore to avoid selecting either MDS or AML as the canonical
+        # diagnosis and instead mark the diagnosis as conflicting while preserving the
+        # underlying pathology disagreement.
+        expected_diagnosis=None,
+        expected_diagnosis_status="conflicting",
         expected_disease_state=None,
         expected_ecog="2",
-        expected_conflict_fields=("diagnosis", "pathology", "blasts"),
+        expected_conflict_fields=("pathology",),
+        notes="Do not collapse unresolved MDS-vs-AML pathology into a single canonical diagnosis.",
     ),
     GoldCase(
         case_id="Q04",

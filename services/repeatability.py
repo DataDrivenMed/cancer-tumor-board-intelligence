@@ -14,6 +14,15 @@ from services.semantic_integrity import inspect_raw_semantic_integrity, semantic
 DEFAULT_STUDY_DIR = Path("runtime_data") / "repeatability_studies"
 LATEST_STUDY_JSON = "latest_study.json"
 STUDY_SCHEMA_VERSION = "1.0"
+CORE_METRICS = (
+    "field_accuracy",
+    "provenance_verification",
+    "missing_information_recall",
+    "conflict_detection",
+    "molecular_accuracy",
+    "treatment_coverage",
+    "treatment_order_accuracy",
+)
 
 
 def _utc_now_iso() -> str:
@@ -27,8 +36,17 @@ def _atomic_write(path: Path, text: str) -> None:
     temporary.replace(path)
 
 
+def _strict_score_pass(score: dict[str, Any]) -> bool:
+    return (
+        bool(score.get("passed_core_gate", False))
+        and all(float(score.get(metric, 0.0)) == 1.0 for metric in CORE_METRICS)
+        and int(score.get("prohibited_assertions", 0)) == 0
+        and float(score.get("unsupported_provenance_assertion_rate", 0.0)) == 0.0
+    )
+
+
 def evaluate_benchmark_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Add deterministic semantic/overall qualification results to one benchmark run."""
+    """Add deterministic semantic and strict repeatability qualification to one run."""
     scores = {
         row.get("case_id"): row
         for row in payload.get("scores", []) or []
@@ -44,7 +62,8 @@ def evaluate_benchmark_payload(payload: dict[str, Any]) -> dict[str, Any]:
             case_results.append(
                 {
                     "case_id": case_id,
-                    "extraction_pass": False,
+                    "core_gate_pass": False,
+                    "strict_extraction_pass": False,
                     "semantic_pass": False,
                     "overall_pass": False,
                     "semantic_error_count": 0,
@@ -56,13 +75,15 @@ def evaluate_benchmark_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raw = diagnostic.get("raw_extraction", {}) or {}
         findings = inspect_raw_semantic_integrity(raw)
         semantic_pass = semantic_integrity_passes(findings)
-        extraction_pass = bool(score.get("passed_core_gate", False))
+        core_gate_pass = bool(score.get("passed_core_gate", False))
+        strict_extraction_pass = _strict_score_pass(score)
         case_results.append(
             {
                 "case_id": case_id,
-                "extraction_pass": extraction_pass,
+                "core_gate_pass": core_gate_pass,
+                "strict_extraction_pass": strict_extraction_pass,
                 "semantic_pass": semantic_pass,
-                "overall_pass": extraction_pass and semantic_pass,
+                "overall_pass": strict_extraction_pass and semantic_pass,
                 "semantic_error_count": sum(1 for f in findings if f.severity in {"error", "critical"}),
                 "semantic_finding_codes": [f.code for f in findings],
             }
@@ -161,24 +182,16 @@ def aggregate_study(study: dict[str, Any]) -> dict[str, Any]:
             "pass_rate": passes / len(rows) if rows else 0.0,
         }
 
-    metric_names = (
-        "field_accuracy",
-        "provenance_verification",
-        "missing_information_recall",
-        "conflict_detection",
-        "molecular_accuracy",
-        "treatment_coverage",
-        "treatment_order_accuracy",
-    )
     metric_means = {
         name: (sum(float(row.get(name, 0.0)) for row in scores) / len(scores) if scores else 0.0)
-        for name in metric_names
+        for name in CORE_METRICS
     }
 
     return {
         "runs_completed": len(runs),
         "total_case_executions": len(case_rows),
-        "extraction_core_passes": sum(1 for row in case_rows if row.get("extraction_pass")),
+        "core_gate_passes": sum(1 for row in case_rows if row.get("core_gate_pass")),
+        "strict_extraction_passes": sum(1 for row in case_rows if row.get("strict_extraction_pass")),
         "semantic_passes": sum(1 for row in case_rows if row.get("semantic_pass")),
         "overall_passes": sum(1 for row in case_rows if row.get("overall_pass")),
         "exact_provenance_rate": verified / total_anchors if total_anchors else 1.0,
@@ -186,6 +199,9 @@ def aggregate_study(study: dict[str, Any]) -> dict[str, Any]:
         "provenance_verified": verified,
         "prohibited_assertions": sum(int(run.get("prohibited_assertions", 0)) for run in runs),
         "unsupported_provenance_sum": sum(float(run.get("unsupported_provenance_sum", 0.0)) for run in runs),
+        "all_core_metrics_perfect": bool(scores) and all(
+            float(row.get(metric, 0.0)) == 1.0 for row in scores for metric in CORE_METRICS
+        ),
         "case_stability": case_stability,
         "metric_means": metric_means,
     }
@@ -197,7 +213,8 @@ def study_to_case_csv(study: dict[str, Any]) -> str:
         "run",
         "run_timestamp_utc",
         "case_id",
-        "extraction_pass",
+        "core_gate_pass",
+        "strict_extraction_pass",
         "semantic_pass",
         "overall_pass",
         "semantic_error_count",
@@ -212,7 +229,8 @@ def study_to_case_csv(study: dict[str, Any]) -> str:
                     "run": run_index,
                     "run_timestamp_utc": run.get("run_timestamp_utc"),
                     "case_id": row.get("case_id"),
-                    "extraction_pass": row.get("extraction_pass"),
+                    "core_gate_pass": row.get("core_gate_pass"),
+                    "strict_extraction_pass": row.get("strict_extraction_pass"),
                     "semantic_pass": row.get("semantic_pass"),
                     "overall_pass": row.get("overall_pass"),
                     "semantic_error_count": row.get("semantic_error_count"),

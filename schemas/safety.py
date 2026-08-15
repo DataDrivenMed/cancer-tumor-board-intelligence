@@ -34,6 +34,9 @@ class SafetyEvidenceRecord(BaseModel):
 
     therapy_terms: list[str] = Field(default_factory=list)
     disease_terms: list[str] = Field(default_factory=list)
+    # Optional patient-context terms that must be represented before a conditional
+    # warning/contraindication is treated as applicable to the case.
+    trigger_terms: list[str] = Field(default_factory=list)
     evidence_type: SafetyEvidenceType
     severity: SafetySeverity
     safety_issue: str
@@ -50,6 +53,7 @@ class SafetyFinding(BaseModel):
     evidence_type: SafetyEvidenceType
     severity: SafetySeverity
     therapy_terms_matched: list[str] = Field(default_factory=list)
+    trigger_terms_matched: list[str] = Field(default_factory=list)
     safety_issue: str
     source_title: str
     source_locator: str

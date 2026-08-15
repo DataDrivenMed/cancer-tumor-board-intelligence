@@ -3,6 +3,7 @@ from qualification.scoring import (
     _diagnosis_matches,
     _is_positive_prohibited_assertion,
     _missing_concept_present,
+    _safe_null_diagnosis_abstention,
     _substantive_fact,
     _uncertain_diagnosis_preserved,
 )
@@ -40,6 +41,13 @@ def test_q10_uncertainty_requires_wording_or_uncertain_status():
     assert _uncertain_diagnosis_preserved("suspected hematologic malignancy", DataStatus.CONFIRMED)
     assert _uncertain_diagnosis_preserved("hematologic malignancy", DataStatus.UNKNOWN)
     assert not _uncertain_diagnosis_preserved("hematologic malignancy", DataStatus.CONFIRMED)
+
+
+def test_safe_null_diagnosis_abstention_requires_uncertain_status():
+    assert _safe_null_diagnosis_abstention(None, DataStatus.UNKNOWN)
+    assert _safe_null_diagnosis_abstention(None, DataStatus.NOT_DOCUMENTED)
+    assert not _safe_null_diagnosis_abstention(None, DataStatus.CONFIRMED)
+    assert not _safe_null_diagnosis_abstention("AML", DataStatus.UNKNOWN)
 
 
 def test_substantive_uncertain_fact_requires_provenance_scoring():

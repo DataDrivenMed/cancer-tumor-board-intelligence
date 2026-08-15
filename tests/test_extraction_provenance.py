@@ -1,4 +1,4 @@
-from agents.extraction import _verified_provenance
+from agents.extraction import SYSTEM_INSTRUCTIONS, _verified_provenance
 from services.document_parser import parse_text
 
 
@@ -28,3 +28,11 @@ def test_paraphrased_excerpt_fails_verification():
     )
     assert verified is False
     assert provenance.source_verified is False
+
+
+def test_pending_results_must_be_represented_as_missing_items():
+    instructions = SYSTEM_INSTRUCTIONS.lower()
+    assert "must also appear in missing_items" in instructions
+    assert "availability to 'pending'" in instructions
+    assert "never convert a pending test into a positive or negative result" in instructions
+    assert "completeness audit" in instructions

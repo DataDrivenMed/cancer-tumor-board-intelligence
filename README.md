@@ -4,7 +4,7 @@ Research-prototype scaffold for an agentic, evidence-grounded tumor-board intell
 
 ## Current milestone
 
-The current build includes provenance-aware case extraction, canonical case representation, data-quality checks, mock specialist routing, abstention logic, a tumor-board brief shell, and an audit trail.
+The current build includes provenance-aware case extraction, canonical case representation, data-quality checks, mock specialist routing, abstention logic, a tumor-board brief shell, an audit trail, and a 10-case synthetic extraction qualification suite.
 
 It intentionally contains **no validated clinical recommendation engine** and **no real patient data**.
 
@@ -50,6 +50,33 @@ MODEL_REASONING_EFFORT = "high"
 ```
 
 No `OPENAI_API_KEY` is required.
+
+## Extraction qualification suite
+
+The Streamlit app includes an **Extraction Benchmark** page with 10 synthetic hematologic malignancy cases designed to stress different failure modes:
+
+1. straightforward AML extraction
+2. missing ECOG and renal information
+3. conflicting pathology
+4. pending FLT3 testing that must not be converted into a positive result
+5. complex multi-line AML treatment chronology
+6. a molecular variant without documented clinical actionability
+7. conflicting lymphoma stage information
+8. myeloma with transplant and multiple prior regimens
+9. historical cancer information that must not contaminate the current diagnosis
+10. an intentionally insufficient case requiring preservation of uncertainty
+
+Pre-specified gold expectations are stored separately from model output. Deterministic scoring currently reports key-field accuracy, exact provenance verification, missing-information recall, conflict detection, molecular coverage, treatment coverage and chronology, prohibited assertions, and unsupported-provenance confirmed assertions.
+
+The current unsupported-provenance metric is deliberately narrow: it checks whether confirmed claims possess exact source anchors. It is **not** treated as a complete semantic hallucination detector. Human adjudication and later semantic error analysis remain required before any claim of clinical validation.
+
+Provisional development gate before enabling downstream clinical reasoning:
+
+- 10/10 qualification cases pass the core gate
+- 100% exact provenance verification
+- zero prohibited inferred assertions
+- zero unsupported-provenance confirmed assertions
+- manual review of every benchmark failure
 
 ## Safety scope
 

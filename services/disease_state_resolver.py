@@ -9,7 +9,7 @@ from services.document_parser import ParsedDocument
 from services.extraction_audit import NormalizationEvent, make_normalization_event
 
 
-DISEASE_STATE_RESOLVER_VERSION = "1.1.0"
+DISEASE_STATE_RESOLVER_VERSION = "1.2.0"
 
 
 _PLACEHOLDER_STATUSES = {
@@ -85,6 +85,7 @@ _STATE_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
     ("persistent", re.compile(r"\bpersistent disease\b", re.I), "observed"),
     ("remission", re.compile(r"\bin remission\b|\bremission\b", re.I), "observed"),
+    ("resected", re.compile(r"\bresected\b|\bstatus post resection\b|\bpost-resection\b", re.I), "observed"),
     ("metastatic", re.compile(r"\bmetastatic\b", re.I), "observed"),
     ("metastatic", re.compile(r"\bmetastas(?:is|es)\b", re.I), "derived"),
 )
@@ -127,8 +128,6 @@ def _is_uncertain_or_negated(text: str, start: int, end: int) -> bool:
     if any(marker in context for marker in _NEGATION_MARKERS):
         return True
 
-    # Restrict uncertainty handling to the local phrase so a remote "suspected"
-    # does not suppress an otherwise explicit current-state statement.
     local_left = text[max(0, start - 35):start].lower()
     local_right = text[end:min(len(text), end + 20)].lower()
     local = local_left + text[start:end].lower() + local_right
@@ -138,21 +137,30 @@ def _is_uncertain_or_negated(text: str, start: int, end: int) -> bool:
 def _diagnosis_anchor_tokens(payload: dict[str, Any]) -> set[str]:
     diagnosis = payload.get("diagnosis") or {}
     value = _norm(diagnosis.get("value"))
-    tokens = {
+    return {
         token
         for token in re.findall(r"[a-z0-9]+", value)
         if len(token) >= 4 and token not in _DIAGNOSIS_GENERIC_TOKENS
     }
-    return tokens
 
 
-def _segment_is_current_diagnosis_context(text: str, diagnosis_tokens: set[str]) -> bool:
-    normalized = _norm(text)
-    if any(marker in normalized for marker in _CURRENT_CONTEXT_MARKERS):
+def _match_is_current_diagnosis_context(
+    text: str,
+    start: int,
+    end: int,
+    diagnosis_tokens: set[str],
+    radius: int = 80,
+) -> bool:
+    """Require candidate state wording to be locally tied to the current diagnosis.
+
+    Segment-wide anchoring is intentionally insufficient because a single source
+    segment can contain both a remote historical malignancy and the current tumor.
+    """
+
+    local = text[max(0, start - radius): min(len(text), end + radius)].lower()
+    if any(marker in local for marker in _CURRENT_CONTEXT_MARKERS):
         return True
-    if diagnosis_tokens and any(token in normalized for token in diagnosis_tokens):
-        return True
-    return False
+    return bool(diagnosis_tokens and any(token in local for token in diagnosis_tokens))
 
 
 def _candidate_states(document: ParsedDocument, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -160,10 +168,15 @@ def _candidate_states(document: ParsedDocument, payload: dict[str, Any]) -> list
     diagnosis_tokens = _diagnosis_anchor_tokens(payload)
     for segment in document.segments:
         text = segment.text
-        if not _segment_is_current_diagnosis_context(text, diagnosis_tokens):
-            continue
         for canonical, pattern, information_type in _STATE_PATTERNS:
             for match in pattern.finditer(text):
+                if not _match_is_current_diagnosis_context(
+                    text,
+                    match.start(),
+                    match.end(),
+                    diagnosis_tokens,
+                ):
+                    continue
                 if _is_uncertain_or_negated(text, match.start(), match.end()):
                     continue
                 candidates.append(
@@ -184,13 +197,11 @@ def resolve_disease_state(
 ) -> DiseaseStateResolution:
     """Promote only explicit, unambiguous source-supported current disease-state evidence.
 
-    This resolver runs after model extraction. It never overwrites a substantive
-    model disease state, never adjudicates a conflict, and never uses external
-    medical knowledge. Candidate phrases must occur in a segment anchored to the
-    extracted current diagnosis or explicit current-context language. A phrase
-    such as "liver metastases" may support a derived canonical state of
-    "metastatic" because the metastatic concept is directly present in the
-    source text. Uncertain, negated, remote, and conflicting mentions are ignored.
+    The resolver never overwrites a substantive model disease state, never
+    adjudicates a conflict, and never uses external medical knowledge. Candidate
+    phrases must be locally anchored to the extracted current diagnosis or an
+    explicit current-context phrase. This prevents remote historical disease from
+    leaking into the canonical current state.
     """
 
     out = deepcopy(payload)
@@ -216,8 +227,6 @@ def resolve_disease_state(
 
     canonical = canonical_states[0]
     matching = [candidate for candidate in candidates if candidate["canonical"] == canonical]
-    # Prefer a directly observed adjective/state phrase over a derived plural-noun
-    # form when both are present, but both remain source-grounded.
     selected = next((item for item in matching if item["information_type"] == "observed"), matching[0])
 
     before = deepcopy(out.get("disease_state"))

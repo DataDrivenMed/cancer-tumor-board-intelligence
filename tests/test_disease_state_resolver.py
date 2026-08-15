@@ -48,6 +48,13 @@ def test_promotes_metastatic_as_derived_from_explicit_metastases_wording():
     assert state["source_excerpt"].lower() == "metastases"
 
 
+def test_promotes_resected_when_explicitly_tied_to_current_melanoma():
+    doc = parse_text("A 54-year-old woman has resected stage III cutaneous melanoma. ECOG is 0.")
+    result = resolve_disease_state(document=doc, payload=_payload("cutaneous melanoma"))
+    assert result.payload["disease_state"]["value"] == "resected"
+    assert result.payload["disease_state"]["information_type"] == "observed"
+
+
 def test_does_not_promote_uncertain_suspected_metastatic_diagnosis():
     doc = parse_text("Metastatic carcinoma is suspected after imaging, but biopsy has not returned.")
     result = resolve_disease_state(document=doc, payload=_payload())
@@ -63,6 +70,20 @@ def test_does_not_use_remote_historical_state_without_current_diagnosis_anchor()
     result = resolve_disease_state(document=doc, payload=_payload("thyroid carcinoma"))
     assert result.payload["disease_state"]["value"] is None
     assert result.events == []
+
+
+def test_same_segment_remote_history_does_not_contaminate_current_diagnosis():
+    text = (
+        "She had metastatic breast cancer treated in 2011 and remained without active disease for years. "
+        "After a long interval of routine follow-up with no recurrence, she now has newly diagnosed "
+        "endometrioid endometrial carcinoma confirmed by biopsy."
+    )
+    doc = parse_text(text)
+    result = resolve_disease_state(
+        document=doc,
+        payload=_payload("endometrioid endometrial carcinoma"),
+    )
+    assert result.payload["disease_state"]["value"] == "newly diagnosed"
 
 
 def test_abstains_when_relevant_conflict_is_present():

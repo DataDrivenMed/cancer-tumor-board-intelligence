@@ -4,6 +4,7 @@ from qualification.scoring import (
     _disease_state_matches,
     _is_positive_prohibited_assertion,
     _missing_concept_present,
+    _ordered_treatment_positions,
     _safe_null_diagnosis_abstention,
     _substantive_fact,
     _uncertain_diagnosis_preserved,
@@ -76,3 +77,32 @@ def test_prohibited_assertion_ignores_simple_negation():
         "this finding predicts sensitivity to therapy",
         "predicts sensitivity",
     )
+
+
+def test_treatment_order_allows_multiple_components_in_same_combination_episode():
+    episodes = [
+        "VRd induction bortezomib lenalidomide dexamethasone",
+        "lenalidomide maintenance lenalidomide",
+        "daratumumab carfilzomib dexamethasone daratumumab carfilzomib dexamethasone",
+    ]
+    expected = ("VRd", "lenalidomide", "daratumumab", "carfilzomib", "dexamethasone")
+    assert _ordered_treatment_positions(episodes, expected) == [0, 0, 2, 2, 2]
+
+
+def test_treatment_order_rejects_genuinely_reversed_episode_sequence():
+    episodes = [
+        "gilteritinib gilteritinib",
+        "FLAG-IDA FLAG-IDA",
+    ]
+    expected = ("FLAG-IDA", "gilteritinib")
+    assert _ordered_treatment_positions(episodes, expected) is None
+
+
+def test_treatment_order_uses_later_repeated_component_when_needed():
+    episodes = [
+        "induction dexamethasone",
+        "maintenance lenalidomide",
+        "salvage daratumumab dexamethasone",
+    ]
+    expected = ("lenalidomide", "daratumumab", "dexamethasone")
+    assert _ordered_treatment_positions(episodes, expected) == [1, 2, 2]

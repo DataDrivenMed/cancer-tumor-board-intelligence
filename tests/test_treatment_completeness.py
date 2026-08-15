@@ -75,6 +75,15 @@ def test_does_not_merge_planned_not_started_therapy():
     assert result.added_count == 0
 
 
+def test_does_not_merge_unknown_administration_status():
+    doc = parse_text("The note mentions lenalidomide maintenance without stating whether it began.")
+    payload = {"treatments": [], "extraction_warnings": []}
+    candidates = [_episode("lenalidomide maintenance", "lenalidomide maintenance", "unknown")]
+    result = merge_treatment_candidates(document=doc, payload=payload, candidates=candidates)
+    assert result.payload["treatments"] == []
+    assert result.added_count == 0
+
+
 def test_rejects_candidate_without_exact_source_provenance():
     doc = parse_text("He received FOLFOX.")
     payload = {"treatments": [], "extraction_warnings": []}

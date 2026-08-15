@@ -56,6 +56,79 @@ def _excerpt_from_provenance(item) -> str:
     return " ".join(excerpts)
 
 
+def inspect_raw_semantic_integrity(raw: dict[str, Any] | None) -> list[SemanticIntegrityFinding]:
+    """Inspect model JSON before/without canonical case reconstruction."""
+    raw = raw or {}
+    findings: list[SemanticIntegrityFinding] = []
+
+    if _looks_like_serialized_json_object(raw.get("care_site")):
+        findings.append(
+            SemanticIntegrityFinding(
+                code="SERIALIZED_JSON_IN_SCALAR",
+                severity="error",
+                field="care_site",
+                message="care_site contains a serialized JSON object instead of null or a plain scalar value.",
+            )
+        )
+
+    for treatment in raw.get("treatments", []) or []:
+        excerpt = _norm(treatment.get("source_excerpt"))
+        if any(pattern in excerpt for pattern in _NOT_STARTED_PATTERNS):
+            findings.append(
+                SemanticIntegrityFinding(
+                    code="UNSTARTED_THERAPY_AS_ADMINISTERED",
+                    severity="error",
+                    field="treatments",
+                    message=(
+                        f"{treatment.get('regimen', 'Treatment')} is represented as a treatment episode even though "
+                        "the source explicitly states that treatment has not started."
+                    ),
+                )
+            )
+
+    for fact in raw.get("current_medications", []) or []:
+        excerpt = _norm(fact.get("source_excerpt"))
+        if excerpt and not any(marker in excerpt for marker in _CURRENT_MEDICATION_MARKERS):
+            findings.append(
+                SemanticIntegrityFinding(
+                    code="CURRENT_MEDICATION_TEMPORALITY_UNVERIFIED",
+                    severity="error",
+                    field="current_medications",
+                    message=(
+                        f"{fact.get('field', 'Medication')} is placed in current_medications without explicit source wording that it is current."
+                    ),
+                )
+            )
+        if fact.get("status") == "confirmed" and fact.get("value") is None:
+            findings.append(
+                SemanticIntegrityFinding(
+                    code="CONFIRMED_NULL_CURRENT_MEDICATION_VALUE",
+                    severity="error",
+                    field="current_medications",
+                    message=(
+                        f"{fact.get('field', 'Medication')} is marked confirmed but has a null value; "
+                        "the current-medication representation is incomplete."
+                    ),
+                )
+            )
+
+    for fact in raw.get("transplant_cellular_therapy", []) or []:
+        if fact.get("status") == "confirmed" and fact.get("value") is None:
+            findings.append(
+                SemanticIntegrityFinding(
+                    code="CONFIRMED_NULL_TRANSPLANT_VALUE",
+                    severity="error",
+                    field="transplant_cellular_therapy",
+                    message=(
+                        f"{fact.get('field', 'Transplant/cellular therapy')} is marked confirmed but has a null value; "
+                        "the transplant/cellular-therapy representation is incomplete."
+                    ),
+                )
+            )
+
+    return findings
+
+
 def inspect_semantic_integrity(
     case: CancerTumorBoardCase,
     raw_extraction: dict[str, Any] | None = None,
@@ -66,13 +139,11 @@ def inspect_semantic_integrity(
     It checks whether the structured representation is internally compatible with
     explicit source-supported wording already carried in provenance/raw extraction.
     """
-    findings: list[SemanticIntegrityFinding] = []
-    raw = raw_extraction or {}
+    findings = inspect_raw_semantic_integrity(raw_extraction)
 
-    # Check both the raw model output and the canonical case so this guard remains
-    # active even when callers no longer retain raw_extraction.
-    care_site_values = [raw.get("care_site"), case.care_site]
-    if any(_looks_like_serialized_json_object(value) for value in care_site_values):
+    if _looks_like_serialized_json_object(case.care_site) and not any(
+        f.code == "SERIALIZED_JSON_IN_SCALAR" for f in findings
+    ):
         findings.append(
             SemanticIntegrityFinding(
                 code="SERIALIZED_JSON_IN_SCALAR",
@@ -82,9 +153,13 @@ def inspect_semantic_integrity(
             )
         )
 
+    raw_codes = {(f.code, f.field) for f in findings}
+
     for treatment in case.treatments:
         excerpt = _norm(_excerpt_from_provenance(treatment))
-        if any(pattern in excerpt for pattern in _NOT_STARTED_PATTERNS):
+        if any(pattern in excerpt for pattern in _NOT_STARTED_PATTERNS) and (
+            "UNSTARTED_THERAPY_AS_ADMINISTERED", "treatments"
+        ) not in raw_codes:
             findings.append(
                 SemanticIntegrityFinding(
                     code="UNSTARTED_THERAPY_AS_ADMINISTERED",
@@ -99,7 +174,9 @@ def inspect_semantic_integrity(
 
     for fact in case.current_medications:
         excerpt = _norm(_excerpt_from_provenance(fact))
-        if excerpt and not any(marker in excerpt for marker in _CURRENT_MEDICATION_MARKERS):
+        if excerpt and not any(marker in excerpt for marker in _CURRENT_MEDICATION_MARKERS) and (
+            "CURRENT_MEDICATION_TEMPORALITY_UNVERIFIED", "current_medications"
+        ) not in raw_codes:
             findings.append(
                 SemanticIntegrityFinding(
                     code="CURRENT_MEDICATION_TEMPORALITY_UNVERIFIED",
@@ -112,7 +189,9 @@ def inspect_semantic_integrity(
             )
 
     for fact in case.transplant_cellular_therapy:
-        if getattr(fact.status, "value", fact.status) == "confirmed" and fact.value is None:
+        if getattr(fact.status, "value", fact.status) == "confirmed" and fact.value is None and (
+            "CONFIRMED_NULL_TRANSPLANT_VALUE", "transplant_cellular_therapy"
+        ) not in raw_codes:
             findings.append(
                 SemanticIntegrityFinding(
                     code="CONFIRMED_NULL_TRANSPLANT_VALUE",
@@ -125,7 +204,9 @@ def inspect_semantic_integrity(
             )
 
     for fact in case.current_medications:
-        if getattr(fact.status, "value", fact.status) == "confirmed" and fact.value is None:
+        if getattr(fact.status, "value", fact.status) == "confirmed" and fact.value is None and (
+            "CONFIRMED_NULL_CURRENT_MEDICATION_VALUE", "current_medications"
+        ) not in raw_codes:
             findings.append(
                 SemanticIntegrityFinding(
                     code="CONFIRMED_NULL_CURRENT_MEDICATION_VALUE",

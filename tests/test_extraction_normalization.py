@@ -6,12 +6,89 @@ def _base_raw():
     return {
         "care_site": None,
         "sex": "female",
+        "diagnosis": {
+            "field": "diagnosis",
+            "value": "AML",
+            "status": "confirmed",
+            "confidence": 1.0,
+            "source_segment_ids": ["S0001"],
+            "source_excerpt": "AML",
+        },
+        "conflicts": [],
         "treatments": [],
         "current_medications": [],
         "transplant_cellular_therapy": [],
         "missing_items": [],
         "extraction_warnings": [],
     }
+
+
+def test_unresolved_diagnosis_conflict_cannot_keep_confirmed_canonical_diagnosis():
+    raw = _base_raw()
+    raw["diagnosis"] = {
+        "field": "diagnosis",
+        "value": "acute myeloid leukemia",
+        "status": "confirmed",
+        "confidence": 1.0,
+        "source_segment_ids": ["S0001"],
+        "source_excerpt": "acute myeloid leukemia with 24% blasts",
+    }
+    raw["conflicts"] = [
+        {
+            "field": "diagnosis",
+            "value_a": "myelodysplastic syndrome with excess blasts, 14% blasts",
+            "value_b": "acute myeloid leukemia with 24% blasts",
+            "severity": "high",
+            "source_segment_ids": ["S0001"],
+        }
+    ]
+    normalized = normalize_extraction_output(raw)
+    assert normalized["diagnosis"]["value"] is None
+    assert normalized["diagnosis"]["status"] == "conflicting"
+    assert normalized["diagnosis"]["confidence"] <= 0.5
+    assert normalized["diagnosis"]["source_segment_ids"] == []
+    assert normalized["diagnosis"]["source_excerpt"] is None
+    assert len(normalized["conflicts"]) == 1
+    assert any("unresolved diagnosis-level conflict" in w for w in normalized["extraction_warnings"])
+
+
+def test_stage_conflict_does_not_clear_confirmed_diagnosis():
+    raw = _base_raw()
+    raw["conflicts"] = [
+        {
+            "field": "stage",
+            "value_a": "III",
+            "value_b": "IV",
+            "severity": "high",
+            "source_segment_ids": ["S0001"],
+        }
+    ]
+    normalized = normalize_extraction_output(raw)
+    assert normalized["diagnosis"]["value"] == "AML"
+    assert normalized["diagnosis"]["status"] == "confirmed"
+
+
+def test_already_conflicting_null_diagnosis_is_left_unchanged():
+    raw = _base_raw()
+    raw["diagnosis"] = {
+        "field": "diagnosis",
+        "value": None,
+        "status": "conflicting",
+        "confidence": 0.4,
+        "source_segment_ids": [],
+        "source_excerpt": None,
+    }
+    raw["conflicts"] = [
+        {
+            "field": "diagnosis",
+            "value_a": "MDS",
+            "value_b": "AML",
+            "severity": "high",
+            "source_segment_ids": ["S0001"],
+        }
+    ]
+    normalized = normalize_extraction_output(raw)
+    assert normalized["diagnosis"] == raw["diagnosis"]
 
 
 def test_serialized_json_scalar_is_cleared():

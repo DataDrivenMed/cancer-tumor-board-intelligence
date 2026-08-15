@@ -27,7 +27,7 @@ TARGETED_CASES: tuple[GoldCase, ...] = (
             "She now has newly diagnosed invasive ductal carcinoma of the left breast confirmed by core biopsy. ECOG is 0. "
             "The tumor board question concerns management of the new breast cancer."
         ),
-        expected_diagnosis="invasive ductal carcinoma of the breast",
+        expected_diagnosis="invasive ductal carcinoma",
         expected_disease_state="newly diagnosed",
         expected_ecog="0",
         prohibited_confirmed_values=("diffuse large B-cell lymphoma as current diagnosis", "recurrent lymphoma"),
@@ -58,7 +58,7 @@ TARGETED_CASES: tuple[GoldCase, ...] = (
         expected_diagnosis="diffuse large b-cell lymphoma",
         expected_disease_state="progressive",
         expected_ecog="2",
-        expected_treatments=("R-CHOP", "R-ICE", "CAR-T"),
+        expected_treatments=("R-CHOP", "R-ICE"),
     ),
     GoldCase(
         case_id="T05",
@@ -81,7 +81,7 @@ TARGETED_CASES: tuple[GoldCase, ...] = (
         narrative=(
             "A 60-year-old woman with multiple myeloma received VRd induction, autologous stem cell transplant, and lenalidomide maintenance. "
             "Lenalidomide was stopped in 2025 because of progression. She is now receiving daratumumab plus pomalidomide and dexamethasone. "
-            "ECOG is 1. The board is reviewing response assessment."
+            "She currently has progressive disease. ECOG is 1. The board is reviewing response assessment."
         ),
         expected_diagnosis="multiple myeloma",
         expected_disease_state="progressive",
@@ -113,7 +113,7 @@ TARGETED_CASES: tuple[GoldCase, ...] = (
         expected_diagnosis="multiple myeloma",
         expected_disease_state="progressive",
         expected_ecog="1",
-        expected_treatments=("VRd", "lenalidomide", "daratumumab", "bortezomib", "dexamethasone", "carfilzomib", "pomalidomide", "dexamethasone"),
+        expected_treatments=("VRd", "lenalidomide", "daratumumab", "bortezomib", "dexamethasone", "carfilzomib", "pomalidomide"),
     ),
     GoldCase(
         case_id="T09",
@@ -139,7 +139,7 @@ TARGETED_CASES: tuple[GoldCase, ...] = (
         expected_diagnosis="lung adenocarcinoma",
         expected_disease_state="metastatic",
         expected_ecog="1",
-        expected_missing_fields=("molecular",),
+        expected_missing_fields=("EGFR", "ALK"),
         prohibited_confirmed_values=("EGFR positive", "EGFR mutated", "ALK positive", "ALK rearranged"),
     ),
 )

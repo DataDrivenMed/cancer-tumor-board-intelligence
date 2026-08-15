@@ -18,6 +18,37 @@ def _contains(actual, expected: str | None) -> bool:
     return e in a or a in e if a and e else False
 
 
+_DIAGNOSIS_ALIASES: dict[str, tuple[str, ...]] = {
+    "acute myeloid leukemia": ("acute myeloid leukemia", "aml"),
+    "diffuse large b-cell lymphoma": ("diffuse large b-cell lymphoma", "diffuse large b cell lymphoma", "dlbcl"),
+    "multiple myeloma": ("multiple myeloma", "plasma cell myeloma"),
+    "mantle cell lymphoma": ("mantle cell lymphoma", "mcl"),
+}
+
+
+def _canonical_diagnosis(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = _norm(value)
+    if not text:
+        return text
+    for canonical, aliases in _DIAGNOSIS_ALIASES.items():
+        normalized_aliases = {_norm(alias) for alias in aliases}
+        if text == canonical or text in normalized_aliases:
+            return canonical
+    return text
+
+
+def _diagnosis_matches(actual: str | None, expected: str | None) -> bool:
+    if expected is None:
+        return _contains(actual, None)
+    a = _canonical_diagnosis(actual)
+    e = _canonical_diagnosis(expected)
+    if a == e and a is not None:
+        return True
+    return _contains(actual, expected)
+
+
 def _any_term(texts: Iterable[str], term: str) -> bool:
     t = _norm(term)
     return any(t in _norm(x) for x in texts)
@@ -35,10 +66,6 @@ _MISSING_ALIASES: dict[str, tuple[str, ...]] = {
     "flt3": ("flt3",),
 }
 
-# Conflict scoring is also concept based. A pathology disagreement can be
-# represented by a field named diagnosis, pathology, marrow interpretation,
-# or blast percentage. The benchmark should assess whether the contradiction
-# was preserved, not whether the model chose one preferred label.
 _CONFLICT_ALIASES: dict[str, tuple[str, ...]] = {
     "pathology": ("pathology", "pathologic", "diagnosis", "marrow", "blast", "blasts"),
     "stage": ("stage", "staging"),
@@ -146,7 +173,7 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     notes: list[str] = []
 
     key_checks = [
-        _contains(case.diagnosis.value, gold.expected_diagnosis),
+        _diagnosis_matches(case.diagnosis.value, gold.expected_diagnosis),
         _contains(case.disease_state.value if case.disease_state else None, gold.expected_disease_state),
         _contains(case.performance_status.value if case.performance_status else None, gold.expected_ecog),
     ]

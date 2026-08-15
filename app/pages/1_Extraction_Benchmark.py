@@ -68,6 +68,8 @@ if not model_token and not model_base_url:
 
 if "benchmark_scores" not in st.session_state:
     st.session_state.benchmark_scores = {}
+if "benchmark_diagnostics" not in st.session_state:
+    st.session_state.benchmark_diagnostics = {}
 
 case_labels = {f"{c.case_id} • {c.title}": c for c in CASES}
 selected_label = st.selectbox("Select a stress-test case", list(case_labels))
@@ -101,6 +103,13 @@ if st.button("Run selected qualification case", type="primary"):
             )
             score = score_case(gold, package)
         st.session_state.benchmark_scores[gold.case_id] = score
+        st.session_state.benchmark_diagnostics[gold.case_id] = {
+            "provenance_total": package.provenance_total,
+            "provenance_verified": package.provenance_verified,
+            "provenance_failures": package.provenance_failures,
+            "warnings": package.warnings,
+            "raw_extraction": package.raw_extraction,
+        }
         st.success(f"{gold.case_id} completed. Core gate: {'PASS' if score.passed_core_gate else 'REVIEW / FAIL'}")
         if score.notes:
             for note in score.notes:
@@ -109,6 +118,22 @@ if st.button("Run selected qualification case", type="primary"):
         st.error(str(exc))
     except Exception as exc:
         st.error(f"Qualification case failed safely: {exc}")
+
+if gold.case_id in st.session_state.benchmark_diagnostics:
+    diag = st.session_state.benchmark_diagnostics[gold.case_id]
+    st.markdown("### Extraction diagnostics")
+    d1, d2 = st.columns(2)
+    d1.metric("Provenance anchors", diag["provenance_total"])
+    d2.metric("Exactly verified", diag["provenance_verified"])
+    if diag["provenance_failures"]:
+        st.error("Provenance verification failure(s): " + ", ".join(diag["provenance_failures"]))
+    else:
+        st.success("No provenance verification failures were recorded.")
+    if diag["warnings"]:
+        for warning in diag["warnings"]:
+            st.warning(warning)
+    with st.expander("Inspect structured extraction JSON"):
+        st.json(diag["raw_extraction"])
 
 st.divider()
 st.subheader("Qualification results")
@@ -166,6 +191,13 @@ if st.button("Run all 10 qualification cases", disabled=not allow_batch):
                 case_id=f"QUAL-{case.case_id}",
             )
             st.session_state.benchmark_scores[case.case_id] = score_case(case, package)
+            st.session_state.benchmark_diagnostics[case.case_id] = {
+                "provenance_total": package.provenance_total,
+                "provenance_verified": package.provenance_verified,
+                "provenance_failures": package.provenance_failures,
+                "warnings": package.warnings,
+                "raw_extraction": package.raw_extraction,
+            }
         except Exception as exc:
             st.error(f"{case.case_id} failed safely: {exc}")
             break

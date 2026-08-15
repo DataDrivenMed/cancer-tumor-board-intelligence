@@ -16,22 +16,23 @@ def _norm(value: Any) -> str:
     return " ".join(str(value or "").lower().replace("–", "-").replace("—", "-").split())
 
 
+def _expand_token(token: str) -> list[str]:
+    if token == "rvd":
+        return ["lenalidomide", "bortezomib", "dexamethasone"]
+    return [token]
+
+
 def _signature(item: dict[str, Any]) -> tuple[str, ...]:
-    text = _norm(item.get("regimen"))
-    text = re.sub(r"[/,+]", " ", text).replace("-", " ")
-    tokens = [t for t in re.findall(r"[a-z0-9]+", text) if t not in _STOPWORDS]
+    text = re.sub(r"[/,+]", " ", _norm(item.get("regimen"))).replace("-", " ")
     expanded: list[str] = []
-    for token in tokens:
-        if token == "rvd":
-            expanded.extend(["lenalidomide", "bortezomib", "dexamethasone"])
-        else:
-            expanded.append(token)
+    for token in re.findall(r"[a-z0-9]+", text):
+        if token not in _STOPWORDS:
+            expanded.extend(_expand_token(token))
     for agent in item.get("agents", []) or []:
-        a = _norm(agent)
-        if a == "rvd":
-            expanded.extend(["lenalidomide", "bortezomib", "dexamethasone"])
-        else:
-            expanded.extend(t for t in re.findall(r"[a-z0-9]+", a.replace("-", " ")) if t not in _STOPWORDS)
+        agent_text = re.sub(r"[/,+]", " ", _norm(agent)).replace("-", " ")
+        for token in re.findall(r"[a-z0-9]+", agent_text):
+            if token not in _STOPWORDS:
+                expanded.extend(_expand_token(token))
     return tuple(sorted(set(expanded)))
 
 
@@ -53,31 +54,18 @@ def _likely_duplicate(a: dict[str, Any], b: dict[str, Any]) -> bool:
 def inspect_raw_semantic_integrity_v25(raw: dict[str, Any] | None) -> list[SemanticIntegrityFinding]:
     raw = raw or {}
     findings = list(inspect_raw_semantic_integrity(raw))
-
     treatments = [x for x in raw.get("treatments", []) or [] if isinstance(x, dict)]
     for i, first in enumerate(treatments):
         for second in treatments[i + 1:]:
             if _likely_duplicate(first, second):
-                findings.append(SemanticIntegrityFinding(
-                    code="DUPLICATE_TREATMENT_EPISODE",
-                    severity="error",
-                    field="treatments",
-                    message=f"Semantically duplicate treatment episodes remain for '{first.get('regimen')}' and '{second.get('regimen')}'.",
-                ))
-
+                findings.append(SemanticIntegrityFinding(code="DUPLICATE_TREATMENT_EPISODE", severity="error", field="treatments", message=f"Semantically duplicate treatment episodes remain for '{first.get('regimen')}' and '{second.get('regimen')}'."))
     for index, item in enumerate(raw.get("missing_items", []) or []):
         if not isinstance(item, dict):
             continue
         expected = classify_missing_information(item)
         actual = _norm(item.get("category"))
         if actual != expected:
-            findings.append(SemanticIntegrityFinding(
-                code="MISSING_INFORMATION_CATEGORY_MISMATCH",
-                severity="error",
-                field=f"missing_items[{index}].category",
-                message=f"Missing-information category '{actual or 'unset'}' does not match deterministic ontology category '{expected}'.",
-            ))
-
+            findings.append(SemanticIntegrityFinding(code="MISSING_INFORMATION_CATEGORY_MISMATCH", severity="error", field=f"missing_items[{index}].category", message=f"Missing-information category '{actual or 'unset'}' does not match deterministic ontology category '{expected}'."))
     return findings
 
 

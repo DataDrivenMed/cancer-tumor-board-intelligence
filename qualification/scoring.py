@@ -259,6 +259,34 @@ def _substantive_fact(fact) -> bool:
     }
 
 
+def _ordered_treatment_positions(
+    treatment_names: list[str], expected_terms: Iterable[str]
+) -> list[int] | None:
+    """Find a nondecreasing assignment of expected terms to treatment episodes.
+
+    Multiple expected terms may legitimately map to the same combination-regimen
+    episode. A drug that appears in more than one episode is matched to the first
+    occurrence at or after the previously matched episode. This avoids false
+    chronology failures from repeated components such as dexamethasone while
+    still rejecting genuinely reversed episode order.
+    """
+    positions: list[int] = []
+    minimum_position = 0
+    for term in expected_terms:
+        target = _norm(term)
+        candidates = [
+            idx
+            for idx, text in enumerate(treatment_names)
+            if idx >= minimum_position and target in _norm(text)
+        ]
+        if not candidates:
+            return None
+        position = candidates[0]
+        positions.append(position)
+        minimum_position = position
+    return positions
+
+
 @dataclass
 class QualificationScore:
     case_id: str
@@ -365,19 +393,14 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     elif gold.expected_treatments:
         hits = sum(1 for term in gold.expected_treatments if _any_term(treatment_names, term))
         treatment_coverage = hits / len(gold.expected_treatments)
-        positions = []
-        for term in gold.expected_treatments:
-            pos = next(
-                (i for i, txt in enumerate(treatment_names) if _norm(term) in _norm(txt)),
-                None,
-            )
-            if pos is not None:
-                positions.append(pos)
+        ordered_positions = _ordered_treatment_positions(treatment_names, gold.expected_treatments)
         treatment_order_accuracy = (
-            1.0
-            if len(positions) >= 2 and positions == sorted(positions)
-            else (1.0 if len(positions) <= 1 and treatment_coverage == 1.0 else 0.0)
+            1.0 if treatment_coverage == 1.0 and ordered_positions is not None else 0.0
         )
+        if treatment_coverage == 1.0 and ordered_positions is None:
+            notes.append(
+                "Treatment terms were all present but could not be assigned to treatment episodes in the expected chronological order."
+            )
     else:
         treatment_coverage = 1.0
         treatment_order_accuracy = 1.0

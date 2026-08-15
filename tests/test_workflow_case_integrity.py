@@ -1,19 +1,31 @@
 from __future__ import annotations
 
 from orchestration.workflow import run_workflow
-from schemas.case import CancerTumorBoardCase, ClinicalQuestion, Fact, MissingItem, Provenance
+from schemas.case import (
+    CancerTumorBoardCase,
+    ClinicalQuestion,
+    Fact,
+    MissingItem,
+    Provenance,
+    TreatmentEpisode,
+    TreatmentStatus,
+)
+
+
+def _provenance(value: str) -> Provenance:
+    return Provenance(
+        document_id="DOC-1",
+        source_excerpt=value,
+        source_segment_ids=["S0001"],
+        source_verified=True,
+    )
 
 
 def _fact(field: str, value: str) -> Fact:
     return Fact(
         field=field,
         value=value,
-        provenance=[Provenance(
-            document_id="DOC-1",
-            source_excerpt=value,
-            source_segment_ids=["S0001"],
-            source_verified=True,
-        )],
+        provenance=[_provenance(value)],
     )
 
 
@@ -23,6 +35,14 @@ def _case() -> CancerTumorBoardCase:
         diagnosis=_fact("diagnosis", "acute myeloid leukemia"),
         disease_state=_fact("disease_state", "relapsed"),
         performance_status=_fact("ECOG", "1"),
+        treatments=[
+            TreatmentEpisode(
+                episode_id="TX-001",
+                regimen="synthetic prior regimen",
+                treatment_status=TreatmentStatus.COMPLETED,
+                provenance=[_provenance("synthetic prior regimen")],
+            )
+        ],
         clinical_question=ClinicalQuestion(
             question_type="relapsed_refractory_treatment",
             question="What should be discussed?",

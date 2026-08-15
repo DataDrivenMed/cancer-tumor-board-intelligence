@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -50,8 +51,24 @@ def add_human_correction(fact, old_value, new_value):
 
 
 st.title("Cancer Tumor Board Intelligence")
-st.caption("Research prototype • Synthetic/de-identified cases only • Step 9: provenance-aware case extraction")
+st.caption(
+    "Research prototype • Synthetic/de-identified cases only • Open-weight reasoning model • Provenance-aware extraction"
+)
 st.warning("Development environment only. Do not enter or upload protected health information (PHI).")
+
+with st.expander("Model architecture", expanded=False):
+    st.markdown(
+        """
+**Default reasoning model:** `openai/gpt-oss-120b`  
+**Model type:** Open-weight, Apache 2.0  
+**Reasoning effort:** High  
+**Application dependency:** Provider-neutral OpenAI-compatible model gateway  
+**Clinical policy:** Model output is not accepted as patient fact unless provenance checks and human review succeed.
+
+The model weights are separate from the hosting provider. The current development deployment can use Hugging Face Inference Providers, while a later institutional deployment can point to a self-hosted compatible endpoint without changing the clinical workflow.
+        """
+    )
+
 
 tabs = st.tabs([
     "Case & Extraction",
@@ -73,8 +90,8 @@ for key, default in {
 with tabs[0]:
     st.subheader("Case ingestion and extraction")
     st.write(
-        "The extraction layer converts narrative tumor-board material into a structured case while retaining exact source provenance. "
-        "No treatment recommendation is generated at this stage."
+        "This layer converts narrative tumor-board material into a structured case while retaining exact source provenance. "
+        "It does not generate a treatment recommendation."
     )
 
     mode = st.radio(
@@ -85,7 +102,6 @@ with tabs[0]:
             "Paste synthetic/de-identified narrative",
             "Upload synthetic/de-identified document",
         ],
-        horizontal=False,
     )
 
     parsed_document = None
@@ -94,11 +110,11 @@ with tabs[0]:
     if mode == "Load synthetic structured example":
         sample_path = PROJECT_ROOT / "synthetic_cases" / "syn_aml_001.json"
         sample_data = json.loads(sample_path.read_text(encoding="utf-8"))
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Disease", "AML")
-        col2.metric("Disease state", "Relapsed")
-        col3.metric("Molecular", "FLT3-ITD")
-        col4.metric("ECOG", "1")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Disease", "AML")
+        c2.metric("Disease state", "Relapsed")
+        c3.metric("Molecular", "FLT3-ITD")
+        c4.metric("ECOG", "1")
         with st.expander("View canonical synthetic case"):
             st.code(json.dumps(sample_data, indent=2), language="json")
         if st.button("Run structured development workflow", type="primary"):
@@ -108,7 +124,11 @@ with tabs[0]:
         narrative_path = PROJECT_ROOT / "synthetic_cases" / "syn_aml_001.txt"
         narrative = narrative_path.read_text(encoding="utf-8")
         st.text_area("Synthetic source narrative", value=narrative, height=300, disabled=True)
-        parsed_document = parse_text(narrative, document_id="SYN-DOC-NARRATIVE", filename="syn_aml_001.txt")
+        parsed_document = parse_text(
+            narrative,
+            document_id="SYN-DOC-NARRATIVE",
+            filename="syn_aml_001.txt",
+        )
 
     elif mode == "Paste synthetic/de-identified narrative":
         narrative = st.text_area(
@@ -117,7 +137,11 @@ with tabs[0]:
             placeholder="Paste a synthetic or fully de-identified tumor-board narrative here. Do not enter PHI.",
         )
         if narrative.strip():
-            parsed_document = parse_text(narrative, document_id="DOC-PASTED", filename="pasted_case.txt")
+            parsed_document = parse_text(
+                narrative,
+                document_id="DOC-PASTED",
+                filename="pasted_case.txt",
+            )
 
     else:
         uploaded = st.file_uploader(
@@ -127,7 +151,11 @@ with tabs[0]:
         )
         if uploaded:
             try:
-                parsed_document = parse_upload(uploaded.name, uploaded.getvalue(), document_id="DOC-UPLOAD")
+                parsed_document = parse_upload(
+                    uploaded.name,
+                    uploaded.getvalue(),
+                    document_id="DOC-UPLOAD",
+                )
             except Exception as exc:
                 st.error(f"Could not parse file: {exc}")
 
@@ -139,23 +167,34 @@ with tabs[0]:
         with st.expander("Inspect provenance-ready source segments"):
             st.code(parsed_document.numbered_text(), language="text")
 
-        api_key = get_secret("OPENAI_API_KEY")
-        model = get_secret("OPENAI_EXTRACTION_MODEL", "gpt-5") or "gpt-5"
+        model_token = get_secret("MODEL_AUTH_TOKEN") or get_secret("HF_TOKEN")
+        model_name = (
+            get_secret("MODEL_NAME", "openai/gpt-oss-120b:fireworks-ai")
+            or "openai/gpt-oss-120b:fireworks-ai"
+        )
+        model_base_url = get_secret("MODEL_BASE_URL")
+        reasoning_effort = get_secret("MODEL_REASONING_EFFORT", "high") or "high"
 
-        if not api_key:
-            st.warning(
-                "AI extraction is installed but not activated because OPENAI_API_KEY has not yet been added to Streamlit Secrets. "
-                "The structured synthetic workflow remains available without a key."
+        if model_base_url:
+            os.environ["MODEL_BASE_URL"] = model_base_url
+
+        if not model_token and not model_base_url:
+            st.info(
+                "Open-weight extraction is installed but no inference endpoint is configured. "
+                "For the current hosted prototype, add a Hugging Face token as MODEL_AUTH_TOKEN or HF_TOKEN. "
+                "This is not an OpenAI API key. A later institutional deployment can instead use a self-hosted endpoint."
             )
         else:
-            st.caption(f"Extraction model configured: {model}")
-            if st.button("Extract structured case with AI", type="primary"):
+            st.caption(
+                f"Configured model: {model_name} • reasoning effort: {reasoning_effort}"
+            )
+            if st.button("Extract structured case with open-weight AI", type="primary"):
                 try:
-                    with st.spinner("Extracting patient facts and verifying source provenance..."):
+                    with st.spinner("Extracting patient facts and verifying exact source provenance..."):
                         package = extract_case(
                             document=parsed_document,
-                            api_key=api_key,
-                            model=model,
+                            api_key=model_token or "local-no-auth",
+                            model=model_name,
                             case_id="EXTRACTED-001",
                         )
                     st.session_state.extraction_package = package
@@ -182,7 +221,7 @@ with tabs[0]:
 
         if package.provenance_failures:
             st.error(
-                "Some extracted claims failed exact source verification. These items must not be treated as verified facts until reviewed."
+                "Some extracted claims failed exact source verification. These items cannot be treated as verified facts until reviewed."
             )
             st.write("Failed items: " + ", ".join(package.provenance_failures))
         else:
@@ -194,7 +233,7 @@ with tabs[0]:
         case = package.case
         st.markdown("### Clinician verification")
         st.caption(
-            "Review the decision-critical extraction before allowing downstream routing. Changes are recorded as human corrections in provenance."
+            "Review decision-critical extraction before downstream routing. Human corrections are retained in provenance."
         )
 
         with st.form("clinical_review_form"):
@@ -205,28 +244,40 @@ with tabs[0]:
                 "Performance status / ECOG",
                 value=str(case.performance_status.value or "") if case.performance_status else "",
             )
-            question_value = st.text_area("Clinical question", value=case.clinical_question.question, height=90)
+            question_value = st.text_area(
+                "Clinical question",
+                value=case.clinical_question.question,
+                height=90,
+            )
 
             st.markdown("#### Molecular findings")
             molecular_checks = []
-            if case.molecular_findings:
-                for idx, item in enumerate(case.molecular_findings):
-                    label = f"Verify {item.gene} {item.alteration_type or ''}".strip()
-                    molecular_checks.append(st.checkbox(label, key=f"mol_verify_{idx}"))
-            else:
+            for idx, item in enumerate(case.molecular_findings):
+                molecular_checks.append(
+                    st.checkbox(
+                        f"Verify {item.gene} {item.alteration_type or ''}".strip(),
+                        key=f"mol_verify_{idx}",
+                    )
+                )
+            if not case.molecular_findings:
                 st.info("No molecular findings extracted.")
 
             st.markdown("#### Treatment history")
             treatment_checks = []
-            if case.treatments:
-                for idx, item in enumerate(case.treatments):
-                    treatment_checks.append(
-                        st.checkbox(f"Verify treatment episode: {item.regimen}", key=f"tx_verify_{idx}")
+            for idx, item in enumerate(case.treatments):
+                treatment_checks.append(
+                    st.checkbox(
+                        f"Verify treatment episode: {item.regimen}",
+                        key=f"tx_verify_{idx}",
                     )
-            else:
+                )
+            if not case.treatments:
                 st.info("No treatment episodes extracted.")
 
-            confirm = st.form_submit_button("Confirm reviewed case for downstream workflow", type="primary")
+            confirm = st.form_submit_button(
+                "Confirm reviewed case for downstream workflow",
+                type="primary",
+            )
 
         if confirm:
             add_human_correction(case.diagnosis, case.diagnosis.value, diagnosis_value)
@@ -240,19 +291,17 @@ with tabs[0]:
             for idx, checked in enumerate(treatment_checks):
                 case.treatments[idx].human_verified = checked
 
-            unresolved_provenance = len(package.provenance_failures) > 0
-            unreviewed_molecular = any(not x for x in molecular_checks) if molecular_checks else False
-            unreviewed_treatments = any(not x for x in treatment_checks) if treatment_checks else False
-
-            if unresolved_provenance or unreviewed_molecular or unreviewed_treatments:
+            unresolved = bool(package.provenance_failures)
+            unresolved = unresolved or any(not x for x in molecular_checks)
+            unresolved = unresolved or any(not x for x in treatment_checks)
+            if unresolved:
                 st.warning(
-                    "The case was saved, but one or more provenance or verification items remain unresolved. "
-                    "Downstream clinical recommendation remains blocked."
+                    "One or more provenance or verification items remain unresolved. Downstream clinical recommendation remains blocked."
                 )
 
             st.session_state.reviewed_case = case
             st.session_state.result = run_workflow(case)
-            st.success("Reviewed case stored. Review Data Quality, Routing & Agents, Tumor Board Brief, and Audit.")
+            st.success("Reviewed case stored. Continue through the remaining tabs.")
 
         with st.expander("View raw structured extraction"):
             st.json(package.raw_extraction)
@@ -315,13 +364,12 @@ with tabs[2]:
             c1.metric("Question class", routing.question_type.replace("_", " ").title())
             c2.metric("Complexity", routing.complexity.replace("_", " ").title())
             st.markdown("**Agents selected:** " + " · ".join(a.replace("_", " ").title() for a in routing.selected_agents))
-            st.markdown("**Routing rationale:**")
-            for r in routing.rationale:
-                st.write(f"• {r}")
+            for rationale in routing.rationale:
+                st.write(f"• {rationale}")
 
         st.markdown("### Specialist outputs")
         for agent_id, output in result["specialist_outputs"].items():
-            with st.expander(agent_id.replace("_", " ").title(), expanded=False):
+            with st.expander(agent_id.replace("_", " ").title()):
                 st.write(output.summary)
                 for warning in output.warnings:
                     st.warning(warning)
@@ -340,14 +388,14 @@ with tabs[3]:
             st.error(final.abstention_reason)
         if final.major_uncertainties:
             st.markdown("#### Major uncertainties")
-            for u in final.major_uncertainties:
-                st.write(f"• {u}")
+            for item in final.major_uncertainties:
+                st.write(f"• {item}")
         st.markdown("#### Board discussion priorities")
-        for p in final.discussion_priorities:
-            st.write(f"• {p}")
+        for item in final.discussion_priorities:
+            st.write(f"• {item}")
         st.markdown("#### Red-team findings")
-        for f in result["red_team_findings"]:
-            st.warning(f"{f.severity.upper()} • {f.category}: {f.issue}")
+        for finding in result["red_team_findings"]:
+            st.warning(f"{finding.severity.upper()} • {finding.category}: {finding.issue}")
         st.caption(
             "Clinical recommendation remains intentionally disabled until authoritative evidence connectors, verification, and validation benchmarks are active."
         )

@@ -9,7 +9,7 @@ from services.document_parser import ParsedDocument
 from services.extraction_audit import NormalizationEvent, make_normalization_event
 
 
-DISEASE_STATE_RESOLVER_VERSION = "1.3.0"
+DISEASE_STATE_RESOLVER_VERSION = "1.4.0"
 
 
 _PLACEHOLDER_STATUSES = {
@@ -33,15 +33,29 @@ _UNCERTAINTY_MARKERS = (
     "may be",
 )
 
-_NEGATION_MARKERS = (
+_GENERIC_NEGATION_MARKERS = (
     "no evidence of",
-    "without",
     "negative for",
-    "not metastatic",
-    "no metastatic",
-    "no metastasis",
-    "no metastases",
 )
+
+_STATE_NEGATION_MARKERS: dict[str, tuple[str, ...]] = {
+    "newly diagnosed": ("not newly diagnosed",),
+    "relapsed": ("no relapse", "without relapse", "not relapsed"),
+    "recurrent": ("no recurrence", "without recurrence", "no recurrent", "not recurrent"),
+    "refractory": ("not refractory", "non-refractory"),
+    "progressive": ("no progression", "without progression", "not progressive"),
+    "persistent": ("no persistent disease", "not persistent"),
+    "remission": ("not in remission", "no remission"),
+    "resected": ("not resected", "unresected"),
+    "metastatic": (
+        "not metastatic",
+        "no metastatic",
+        "no metastasis",
+        "no metastases",
+        "without metastasis",
+        "without metastases",
+    ),
+}
 
 _CURRENT_CONTEXT_MARKERS = (
     "now has",
@@ -121,10 +135,13 @@ def _window(text: str, start: int, end: int, radius: int = 48) -> str:
     return text[max(0, start - radius): min(len(text), end + radius)].lower()
 
 
-def _is_uncertain_or_negated(text: str, start: int, end: int) -> bool:
+def _is_uncertain_or_negated(text: str, start: int, end: int, canonical: str) -> bool:
     context = _window(text, start, end)
-    if any(marker in context for marker in _NEGATION_MARKERS):
+    if any(marker in context for marker in _GENERIC_NEGATION_MARKERS):
         return True
+    if any(marker in context for marker in _STATE_NEGATION_MARKERS.get(canonical, ())):
+        return True
+
     local_left = text[max(0, start - 35):start].lower()
     local_right = text[end:min(len(text), end + 20)].lower()
     local = local_left + text[start:end].lower() + local_right
@@ -172,7 +189,7 @@ def _candidate_states(document: ParsedDocument, payload: dict[str, Any]) -> list
             for match in pattern.finditer(text):
                 if not _match_is_current_diagnosis_context(text, match.start(), match.end(), diagnosis_tokens):
                     continue
-                if _is_uncertain_or_negated(text, match.start(), match.end()):
+                if _is_uncertain_or_negated(text, match.start(), match.end(), canonical):
                     continue
                 candidates.append(
                     {

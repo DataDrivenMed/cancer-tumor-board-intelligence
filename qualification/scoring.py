@@ -23,9 +23,6 @@ def _any_term(texts: Iterable[str], term: str) -> bool:
     return any(t in _norm(x) for x in texts)
 
 
-# Missing-data scoring is concept based, not literal-token based. This prevents
-# double-counting synonyms such as ECOG/performance status or creatinine/renal
-# function as separate clinical omissions.
 _MISSING_ALIASES: dict[str, tuple[str, ...]] = {
     "performance": ("performance", "ecog", "performance status"),
     "renal": ("renal", "creatinine", "kidney", "egfr"),
@@ -36,6 +33,15 @@ _MISSING_ALIASES: dict[str, tuple[str, ...]] = {
     "stage": ("stage", "staging"),
     "treatment": ("treatment", "therapy", "regimen"),
     "flt3": ("flt3",),
+}
+
+# Conflict scoring is also concept based. A pathology disagreement can be
+# represented by a field named diagnosis, pathology, marrow interpretation,
+# or blast percentage. The benchmark should assess whether the contradiction
+# was preserved, not whether the model chose one preferred label.
+_CONFLICT_ALIASES: dict[str, tuple[str, ...]] = {
+    "pathology": ("pathology", "pathologic", "diagnosis", "marrow", "blast", "blasts"),
+    "stage": ("stage", "staging"),
 }
 
 
@@ -52,13 +58,21 @@ def _missing_concept_present(texts: Iterable[str], concept: str) -> bool:
     return any(_any_term(texts, alias) for alias in aliases)
 
 
-def _assertion_texts(package: ExtractionPackage) -> list[str]:
-    """Return model assertions only, excluding provenance excerpts and source text.
+def _canonical_conflict_concept(term: str) -> str:
+    t = _norm(term)
+    for concept, aliases in _CONFLICT_ALIASES.items():
+        if t == concept or t in {_norm(a) for a in aliases}:
+            return concept
+    return t
 
-    The benchmark must not mark a prohibited phrase as a hallucination merely
-    because the phrase appears in a quoted source excerpt, a missing-data reason,
-    or a warning. Only structured extracted values/interpretations are inspected.
-    """
+
+def _conflict_concept_present(texts: Iterable[str], concept: str) -> bool:
+    aliases = _CONFLICT_ALIASES.get(concept, (concept,))
+    return any(_any_term(texts, alias) for alias in aliases)
+
+
+def _assertion_texts(package: ExtractionPackage) -> list[str]:
+    """Return model assertions only, excluding provenance excerpts and source text."""
     case = package.case
     texts: list[str] = []
 
@@ -101,8 +115,6 @@ def _is_positive_prohibited_assertion(text: str, phrase: str) -> bool:
     if needle not in hay:
         return False
 
-    # Simple negation protection for structured interpretations such as
-    # "does not predict sensitivity". This is intentionally conservative.
     idx = hay.find(needle)
     prefix = hay[max(0, idx - 30):idx]
     negators = ("no ", "not ", "does not ", "did not ", "without ", "not established ")
@@ -138,6 +150,15 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
         _contains(case.disease_state.value if case.disease_state else None, gold.expected_disease_state),
         _contains(case.performance_status.value if case.performance_status else None, gold.expected_ecog),
     ]
+
+    if gold.expected_diagnosis_status:
+        actual_status = getattr(case.diagnosis.status, "value", case.diagnosis.status)
+        key_checks.append(_norm(actual_status) == _norm(gold.expected_diagnosis_status))
+        if not key_checks[-1]:
+            notes.append(
+                f"Diagnosis status mismatch: expected '{gold.expected_diagnosis_status}', extracted '{actual_status}'"
+            )
+
     field_accuracy = sum(key_checks) / len(key_checks)
     if not key_checks[0]:
         notes.append(f"Diagnosis mismatch: extracted '{case.diagnosis.value}'")
@@ -166,11 +187,12 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
 
     conflict_texts = [f"{c.field} {c.value_a} {c.value_b}" for c in case.conflicts]
     if gold.expected_conflict_fields:
-        hits = sum(1 for term in gold.expected_conflict_fields if _any_term(conflict_texts, term))
-        conflict_detection = hits / len(gold.expected_conflict_fields)
-        missed_conflicts = [term for term in gold.expected_conflict_fields if not _any_term(conflict_texts, term)]
-        if missed_conflicts:
-            notes.append("Expected conflict concepts not detected: " + ", ".join(missed_conflicts))
+        expected_concepts = sorted({_canonical_conflict_concept(term) for term in gold.expected_conflict_fields})
+        matched = [concept for concept in expected_concepts if _conflict_concept_present(conflict_texts, concept)]
+        unmatched = [concept for concept in expected_concepts if concept not in matched]
+        conflict_detection = len(matched) / len(expected_concepts)
+        if unmatched:
+            notes.append("Expected conflict concepts not detected: " + ", ".join(unmatched))
     else:
         conflict_detection = 1.0
 

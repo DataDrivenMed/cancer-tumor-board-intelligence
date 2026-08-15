@@ -58,25 +58,24 @@ def classify_missing_information(item: dict[str, Any]) -> str:
     return "other"
 
 
+def _expand_token(token: str) -> list[str]:
+    if token == "rvd":
+        return ["lenalidomide", "bortezomib", "dexamethasone"]
+    return [token]
+
+
 def _canonical_regimen_tokens(item: dict[str, Any]) -> tuple[str, ...]:
     text = _norm(item.get("regimen"))
-    # Normalize common separators while retaining phase words such as maintenance.
-    text = re.sub(r"[/,+]", " ", text)
-    text = text.replace("-", " ")
-    tokens = [t for t in re.findall(r"[a-z0-9]+", text) if t not in _STOPWORDS]
+    text = re.sub(r"[/,+]", " ", text).replace("-", " ")
+    raw_tokens = [t for t in re.findall(r"[a-z0-9]+", text) if t not in _STOPWORDS]
     expanded: list[str] = []
-    for token in tokens:
-        if token == "rvd":
-            expanded.extend(["lenalidomide", "bortezomib", "dexamethasone"])
-        else:
-            expanded.append(token)
-    # Agents help when regimen typography differs, but avoid duplicating phase labels.
+    for token in raw_tokens:
+        expanded.extend(_expand_token(token))
     for agent in item.get("agents", []) or []:
-        a = _norm(agent)
-        if a == "rvd":
-            expanded.extend(["lenalidomide", "bortezomib", "dexamethasone"])
-        else:
-            expanded.extend(t for t in re.findall(r"[a-z0-9]+", a.replace("-", " ")) if t not in _STOPWORDS)
+        agent_text = re.sub(r"[/,+]", " ", _norm(agent)).replace("-", " ")
+        for token in re.findall(r"[a-z0-9]+", agent_text):
+            if token not in _STOPWORDS:
+                expanded.extend(_expand_token(token))
     return tuple(sorted(set(expanded)))
 
 
@@ -95,9 +94,7 @@ def _same_local_event(document: ParsedDocument, a: dict[str, Any], b: dict[str, 
         return True
     sid_a, pos_a = _source_position(document, a)
     sid_b, pos_b = _source_position(document, b)
-    if sid_a and sid_a == sid_b and pos_a >= 0 and pos_b >= 0 and abs(pos_a - pos_b) <= 48:
-        return True
-    return False
+    return bool(sid_a and sid_a == sid_b and pos_a >= 0 and pos_b >= 0 and abs(pos_a - pos_b) <= 48)
 
 
 def treatments_are_semantic_duplicates(document: ParsedDocument, a: dict[str, Any], b: dict[str, Any]) -> bool:
@@ -106,7 +103,6 @@ def treatments_are_semantic_duplicates(document: ParsedDocument, a: dict[str, An
         return False
     phases_a = set(sig_a) & _PHASE_WORDS
     phases_b = set(sig_b) & _PHASE_WORDS
-    # Different explicit phases are distinct episodes even when the drug backbone is the same.
     if phases_a and phases_b and phases_a != phases_b:
         return False
     core_a = set(sig_a) - _PHASE_WORDS
@@ -158,13 +154,7 @@ def _deduplicate_treatments(document: ParsedDocument, payload: dict[str, Any], e
         payload["treatments"] = kept
         reason = f"Removed {removed} semantically duplicate treatment episode(s) representing the same local source event."
         warnings.append(reason)
-        events.append(make_normalization_event(
-            rule="v25_semantic_treatment_deduplication",
-            field_path="treatments",
-            before=before,
-            after=deepcopy(kept),
-            reason=reason,
-        ))
+        events.append(make_normalization_event(rule="v25_semantic_treatment_deduplication", field_path="treatments", before=before, after=deepcopy(kept), reason=reason))
     return removed
 
 
@@ -180,13 +170,7 @@ def _reclassify_missing(payload: dict[str, Any], events: list[NormalizationEvent
         before = deepcopy(item)
         item["category"] = canonical
         changed += 1
-        events.append(make_normalization_event(
-            rule="v25_missing_information_ontology",
-            field_path=f"missing_items[{idx}].category",
-            before=before,
-            after=deepcopy(item),
-            reason="Assigned missing-information category deterministically from the unresolved field/reason text.",
-        ))
+        events.append(make_normalization_event(rule="v25_missing_information_ontology", field_path=f"missing_items[{idx}].category", before=before, after=deepcopy(item), reason="Assigned missing-information category deterministically from the unresolved field/reason text."))
     return changed
 
 
@@ -201,10 +185,4 @@ def harden_extraction_v25(*, document: ParsedDocument, payload: dict[str, Any]) 
         for warning in warnings:
             if warning not in out["extraction_warnings"]:
                 out["extraction_warnings"].append(warning)
-    return HardeningResultV25(
-        payload=out,
-        events=events,
-        warnings=warnings,
-        duplicate_treatments_removed=removed,
-        missing_categories_reclassified=reclassified,
-    )
+    return HardeningResultV25(payload=out, events=events, warnings=warnings, duplicate_treatments_removed=removed, missing_categories_reclassified=reclassified)

@@ -13,8 +13,7 @@ CANONICALIZATION_V22_VERSION = "2.2.0"
 
 _UNCERTAINTY_RE = re.compile(r"\b(suspected|possible|probable|unconfirmed|working diagnosis|concern for|cannot exclude)\b", re.I)
 _METASTATIC_RE = re.compile(r"\bmetastatic\b|\b(?:hepatic|liver|pulmonary|lung|bone|osseous|adrenal|distant)\s+metastas(?:is|es)\b|\bmetastas(?:is|es)\b", re.I)
-_PROGRESSIVE_RE = re.compile(r"\bradiographic progression\b|\bdisease progression\b|\bprogressive disease\b|\bprogression\b", re.I)
-_STAGE_RE = re.compile(r"\bstage\s+([0-9ivx]+[a-c]?)\b", re.I)
+_PROGRESSIVE_RE = re.compile(r"\bradiographic progression\b|\bdisease progression\b|\bprogressive disease\b|\bprogressive\b|\bprogression\b", re.I)
 
 
 @dataclass(frozen=True)
@@ -96,15 +95,16 @@ def _canonicalize_disease_state(
 
     before = deepcopy(disease)
     value = str(disease.get("value") or "")
-    status = _norm(disease.get("status"))
+    source_excerpt = str(disease.get("source_excerpt") or "")
     source_ids = list(disease.get("source_segment_ids", []) or [])
+    state_text = f"{value} {source_excerpt}"
 
-    # Suspected malignancy must not be promoted to a confirmed canonical disease state.
-    if certainty == "suspected" and value:
+    # A non-confirmed diagnosis must not silently become a confirmed disease-state assertion.
+    if certainty != "confirmed" and value:
         disease["value"] = None
         disease["status"] = "unknown"
         disease["confidence"] = min(float(disease.get("confidence", 1.0)), 0.5)
-        warning = "Disease-state value was withheld because the underlying diagnosis is explicitly suspected/unconfirmed."
+        warning = "Disease-state value was withheld because the underlying diagnosis is not confirmed."
         warnings.append(warning)
         events.append(
             make_normalization_event(
@@ -119,28 +119,48 @@ def _canonicalize_disease_state(
         )
         return
 
-    # Stage conflicts belong to a stage representation, not disease_state.
+    # Any unresolved stage conflict is represented in the stage sidecar and prevents a canonical disease-state collapse.
     if any("stage" in _norm(item.get("field")) for item in payload.get("conflicts", []) or []):
-        if "stage" in _norm(value) or status == "conflicting":
-            disease["value"] = None
-            disease["status"] = "conflicting"
-            warning = "Disease-state value was cleared because unresolved stage information is represented as a separate conflict."
-            warnings.append(warning)
-            events.append(
-                make_normalization_event(
-                    rule="stage_conflict_separation",
-                    field_path="disease_state",
-                    before=before,
-                    after=deepcopy(disease),
-                    reason=warning,
-                    source_segment_ids=source_ids,
-                    source_excerpt=disease.get("source_excerpt"),
-                )
+        disease["value"] = None
+        disease["status"] = "conflicting"
+        warning = "Disease-state value was cleared because unresolved stage information is represented separately as a conflict."
+        warnings.append(warning)
+        events.append(
+            make_normalization_event(
+                rule="stage_conflict_separation",
+                field_path="disease_state",
+                before=before,
+                after=deepcopy(disease),
+                reason=warning,
+                source_segment_ids=source_ids,
+                source_excerpt=disease.get("source_excerpt"),
             )
+        )
+        return
+
+    # Temporal progression takes precedence over metastatic extent when both are present.
+    if _PROGRESSIVE_RE.search(state_text):
+        exact = _exact_phrase(document, source_ids, (_PROGRESSIVE_RE,))
+        if exact:
+            disease["value"] = "progressive"
+            disease["status"] = "confirmed"
+            disease["source_segment_ids"], disease["source_excerpt"] = exact
+            if disease != before:
+                events.append(
+                    make_normalization_event(
+                        rule="canonical_progressive_state",
+                        field_path="disease_state",
+                        before=before,
+                        after=deepcopy(disease),
+                        reason="Canonicalized explicit source-supported progression wording and retained exact provenance.",
+                        source_segment_ids=disease["source_segment_ids"],
+                        source_excerpt=disease["source_excerpt"],
+                    )
+                )
             return
 
     # Canonicalize explicit metastatic wording while retaining exact source evidence.
-    if _METASTATIC_RE.search(value):
+    if _METASTATIC_RE.search(state_text):
         exact = _exact_phrase(document, source_ids, (_METASTATIC_RE,))
         if exact:
             disease["value"] = "metastatic"
@@ -154,26 +174,6 @@ def _canonicalize_disease_state(
                         before=before,
                         after=deepcopy(disease),
                         reason="Canonicalized explicit source-supported metastatic wording without adding clinical inference.",
-                        source_segment_ids=disease["source_segment_ids"],
-                        source_excerpt=disease["source_excerpt"],
-                    )
-                )
-            return
-
-    if _PROGRESSIVE_RE.search(value):
-        exact = _exact_phrase(document, source_ids, (_PROGRESSIVE_RE,))
-        if exact:
-            disease["value"] = "progressive"
-            disease["status"] = "confirmed"
-            disease["source_segment_ids"], disease["source_excerpt"] = exact
-            if disease != before:
-                events.append(
-                    make_normalization_event(
-                        rule="canonical_progressive_state",
-                        field_path="disease_state",
-                        before=before,
-                        after=deepcopy(disease),
-                        reason="Canonicalized explicit source-supported progression wording.",
                         source_segment_ids=disease["source_segment_ids"],
                         source_excerpt=disease["source_excerpt"],
                     )
@@ -234,7 +234,6 @@ def canonicalize_clinical_fields_v22(*, document: ParsedDocument, payload: dict[
     _canonicalize_disease_state(document, out, certainty, events, warnings)
     _repair_disease_state_provenance(document, out, events)
 
-    # Add deterministic missing-information categories for evaluation and downstream routing.
     for item in out.get("missing_items", []) or []:
         text = _norm(f"{item.get('field', '')} {item.get('reason', '')}")
         if any(term in text for term in ("pathology", "biopsy", "tissue diagnosis", "histology", "marrow")):

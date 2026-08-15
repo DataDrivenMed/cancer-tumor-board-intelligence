@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Iterable
 
 from agents.extraction import ExtractionPackage
@@ -13,14 +13,25 @@ def _norm(value) -> str:
 
 def _contains(actual, expected: str | None) -> bool:
     if expected is None:
-        return actual is None or _norm(actual) in {"", "unknown", "not documented", "not_documented", "pending", "unavailable"}
+        return actual is None or _norm(actual) in {
+            "",
+            "unknown",
+            "not documented",
+            "not_documented",
+            "pending",
+            "unavailable",
+        }
     a, e = _norm(actual), _norm(expected)
-    return e in a or a in e if a and e else False
+    return (e in a or a in e) if a and e else False
 
 
 _DIAGNOSIS_ALIASES: dict[str, tuple[str, ...]] = {
     "acute myeloid leukemia": ("acute myeloid leukemia", "aml"),
-    "diffuse large b-cell lymphoma": ("diffuse large b-cell lymphoma", "diffuse large b cell lymphoma", "dlbcl"),
+    "diffuse large b-cell lymphoma": (
+        "diffuse large b-cell lymphoma",
+        "diffuse large b cell lymphoma",
+        "dlbcl",
+    ),
     "multiple myeloma": ("multiple myeloma", "plasma cell myeloma"),
     "mantle cell lymphoma": ("mantle cell lymphoma", "mcl"),
     "suspected hematologic malignancy": (
@@ -30,23 +41,49 @@ _DIAGNOSIS_ALIASES: dict[str, tuple[str, ...]] = {
         "haematologic malignancy, suspected",
         "hematologic malignancy - suspected",
         "haematologic malignancy - suspected",
+        "hematologic malignancy (suspected)",
+        "haematologic malignancy (suspected)",
         "hematologic malignancy",
         "haematologic malignancy",
     ),
 }
 
 
-def _canonical_diagnosis(value: str | None) -> str | None:
+_DISEASE_STATE_ALIASES: dict[str, tuple[str, ...]] = {
+    "newly diagnosed": ("newly diagnosed", "new diagnosis", "newly-diagnosed"),
+    "relapsed": ("relapsed", "relapse"),
+    "recurrent": ("recurrent", "recurrence"),
+    "refractory": ("refractory", "treatment refractory"),
+    "progressive": (
+        "progressive",
+        "progression",
+        "progressive disease",
+        "disease progression",
+        "progressing",
+    ),
+    "remission": ("remission", "in remission"),
+}
+
+
+def _canonical_from_aliases(value: str | None, aliases: dict[str, tuple[str, ...]]) -> str | None:
     if value is None:
         return None
     text = _norm(value)
     if not text:
         return text
-    for canonical, aliases in _DIAGNOSIS_ALIASES.items():
-        normalized_aliases = {_norm(alias) for alias in aliases}
-        if text == canonical or text in normalized_aliases:
+    for canonical, variants in aliases.items():
+        normalized = {_norm(v) for v in variants}
+        if text == _norm(canonical) or text in normalized:
             return canonical
     return text
+
+
+def _canonical_diagnosis(value: str | None) -> str | None:
+    return _canonical_from_aliases(value, _DIAGNOSIS_ALIASES)
+
+
+def _canonical_disease_state(value: str | None) -> str | None:
+    return _canonical_from_aliases(value, _DISEASE_STATE_ALIASES)
 
 
 def _diagnosis_matches(actual: str | None, expected: str | None) -> bool:
@@ -59,14 +96,39 @@ def _diagnosis_matches(actual: str | None, expected: str | None) -> bool:
     return _contains(actual, expected)
 
 
+def _disease_state_matches(actual: str | None, expected: str | None) -> bool:
+    if expected is None:
+        return _contains(actual, None)
+    a = _canonical_disease_state(actual)
+    e = _canonical_disease_state(expected)
+    if a == e and a is not None:
+        return True
+    return _contains(actual, expected)
+
+
 def _uncertain_diagnosis_preserved(value: str | None, status) -> bool:
     """Require explicit uncertainty either in the diagnosis wording or its structured status."""
     text = _norm(value)
     status_text = _norm(getattr(status, "value", status))
-    uncertainty_terms = ("suspected", "possible", "probable", "working diagnosis", "not established", "unconfirmed")
+    uncertainty_terms = (
+        "suspected",
+        "possible",
+        "probable",
+        "working diagnosis",
+        "not established",
+        "unconfirmed",
+    )
     if any(term in text for term in uncertainty_terms):
         return True
-    return status_text in {"unknown", "not_documented", "not documented", "pending", "unavailable", "not_assessed", "not assessed"}
+    return status_text in {
+        "unknown",
+        "not_documented",
+        "not documented",
+        "pending",
+        "unavailable",
+        "not_assessed",
+        "not assessed",
+    }
 
 
 def _safe_null_diagnosis_abstention(value: str | None, status) -> bool:
@@ -134,7 +196,14 @@ def _assertion_texts(package: ExtractionPackage) -> list[str]:
     facts += list(case.pathology) + list(case.imaging) + list(case.labs) + list(case.comorbidities)
     facts += list(case.toxicities) + list(case.transplant_cellular_therapy) + list(case.current_medications)
     for fact in facts:
-        if fact.value is not None and _norm(fact.value) not in {"", "unknown", "not documented", "not_documented", "pending", "unavailable"}:
+        if fact.value is not None and _norm(fact.value) not in {
+            "",
+            "unknown",
+            "not documented",
+            "not_documented",
+            "pending",
+            "unavailable",
+        }:
             texts.append(str(fact.value))
 
     for item in case.molecular_findings:
@@ -176,7 +245,18 @@ def _is_positive_prohibited_assertion(text: str, phrase: str) -> bool:
 def _substantive_fact(fact) -> bool:
     if fact is None or fact.value is None:
         return False
-    return _norm(fact.value) not in {"", "unknown", "not documented", "not_documented", "pending", "unavailable", "not assessed", "not_assessed"}
+    return _norm(fact.value) not in {
+        "",
+        "unknown",
+        "not documented",
+        "not_documented",
+        "pending",
+        "unavailable",
+        "not assessed",
+        "not_assessed",
+        "not applicable",
+        "not_applicable",
+    }
 
 
 @dataclass
@@ -204,7 +284,9 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     notes: list[str] = []
 
     diagnosis_ok = _diagnosis_matches(case.diagnosis.value, gold.expected_diagnosis)
-    if gold.allow_null_diagnosis_if_uncertain and _safe_null_diagnosis_abstention(case.diagnosis.value, case.diagnosis.status):
+    if gold.allow_null_diagnosis_if_uncertain and _safe_null_diagnosis_abstention(
+        case.diagnosis.value, case.diagnosis.status
+    ):
         diagnosis_ok = True
     if gold.strict_core_gate and gold.allow_null_diagnosis_if_uncertain:
         uncertainty_ok = _uncertain_diagnosis_preserved(case.diagnosis.value, case.diagnosis.status)
@@ -214,7 +296,10 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
 
     key_checks = [
         diagnosis_ok,
-        _contains(case.disease_state.value if case.disease_state else None, gold.expected_disease_state),
+        _disease_state_matches(
+            case.disease_state.value if case.disease_state else None,
+            gold.expected_disease_state,
+        ),
         _contains(case.performance_status.value if case.performance_status else None, gold.expected_ecog),
     ]
 
@@ -230,9 +315,13 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     if not key_checks[0]:
         notes.append(f"Diagnosis mismatch: extracted '{case.diagnosis.value}'")
     if not key_checks[1]:
-        notes.append(f"Disease-state mismatch: extracted '{case.disease_state.value if case.disease_state else None}'")
+        notes.append(
+            f"Disease-state mismatch: extracted '{case.disease_state.value if case.disease_state else None}'"
+        )
     if not key_checks[2]:
-        notes.append(f"ECOG/performance mismatch: extracted '{case.performance_status.value if case.performance_status else None}'")
+        notes.append(
+            f"ECOG/performance mismatch: extracted '{case.performance_status.value if case.performance_status else None}'"
+        )
 
     molecular_genes = [m.gene for m in case.molecular_findings]
     if gold.require_no_molecular_findings:
@@ -278,10 +367,17 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
         treatment_coverage = hits / len(gold.expected_treatments)
         positions = []
         for term in gold.expected_treatments:
-            pos = next((i for i, txt in enumerate(treatment_names) if _norm(term) in _norm(txt)), None)
+            pos = next(
+                (i for i, txt in enumerate(treatment_names) if _norm(term) in _norm(txt)),
+                None,
+            )
             if pos is not None:
                 positions.append(pos)
-        treatment_order_accuracy = 1.0 if len(positions) >= 2 and positions == sorted(positions) else (1.0 if len(positions) <= 1 and treatment_coverage == 1.0 else 0.0)
+        treatment_order_accuracy = (
+            1.0
+            if len(positions) >= 2 and positions == sorted(positions)
+            else (1.0 if len(positions) <= 1 and treatment_coverage == 1.0 else 0.0)
+        )
     else:
         treatment_coverage = 1.0
         treatment_order_accuracy = 1.0
@@ -300,7 +396,15 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     all_facts = [case.diagnosis, case.disease_state]
     if case.performance_status is not None:
         all_facts.append(case.performance_status)
-    all_facts += list(case.pathology) + list(case.imaging) + list(case.labs) + list(case.comorbidities) + list(case.toxicities) + list(case.transplant_cellular_therapy) + list(case.current_medications)
+    all_facts += (
+        list(case.pathology)
+        + list(case.imaging)
+        + list(case.labs)
+        + list(case.comorbidities)
+        + list(case.toxicities)
+        + list(case.transplant_cellular_therapy)
+        + list(case.current_medications)
+    )
     for fact in all_facts:
         if _substantive_fact(fact):
             assertion_count += 1
@@ -314,7 +418,13 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     unsupported_rate = failed_assertion_prov / assertion_count if assertion_count else 0.0
     provenance_verification = 1.0 - unsupported_rate if assertion_count else 1.0
 
-    core_values = [field_accuracy, provenance_verification, molecular_accuracy, treatment_coverage, treatment_order_accuracy]
+    core_values = [
+        field_accuracy,
+        provenance_verification,
+        molecular_accuracy,
+        treatment_coverage,
+        treatment_order_accuracy,
+    ]
     if gold.expected_missing_fields:
         core_values.append(missing_information_recall)
     if gold.expected_conflict_fields:

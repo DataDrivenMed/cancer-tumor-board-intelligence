@@ -37,6 +37,7 @@ _DISEASE_STATE_EQUIVALENCE: dict[str, tuple[str, ...]] = {
     "remission": ("remission", "in remission"),
     "newly diagnosed": ("newly diagnosed", "new diagnosis", "newly-diagnosed"),
     "persistent": ("persistent", "persistent disease"),
+    "resected": ("resected", "status post resection", "post-resection"),
 }
 
 _UNCERTAINTY_WORDS = re.compile(

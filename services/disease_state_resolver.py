@@ -9,7 +9,7 @@ from services.document_parser import ParsedDocument
 from services.extraction_audit import NormalizationEvent, make_normalization_event
 
 
-DISEASE_STATE_RESOLVER_VERSION = "1.0.0"
+DISEASE_STATE_RESOLVER_VERSION = "1.1.0"
 
 
 _PLACEHOLDER_STATUSES = {
@@ -42,6 +42,34 @@ _NEGATION_MARKERS = (
     "no metastasis",
     "no metastases",
 )
+
+_CURRENT_CONTEXT_MARKERS = (
+    "now has",
+    "currently has",
+    "current disease",
+    "currently",
+    "now shows",
+    "now with",
+    "presented with",
+    "presents with",
+)
+
+_DIAGNOSIS_GENERIC_TOKENS = {
+    "cancer",
+    "carcinoma",
+    "adenocarcinoma",
+    "malignancy",
+    "metastatic",
+    "recurrent",
+    "relapsed",
+    "progressive",
+    "disease",
+    "suspected",
+    "unknown",
+    "primary",
+    "site",
+    "stage",
+}
 
 # Ordered only for deterministic reporting. We never choose among multiple distinct
 # candidate states; ambiguity is preserved instead of adjudicated.
@@ -107,10 +135,33 @@ def _is_uncertain_or_negated(text: str, start: int, end: int) -> bool:
     return any(marker in local for marker in _UNCERTAINTY_MARKERS)
 
 
-def _candidate_states(document: ParsedDocument) -> list[dict[str, Any]]:
+def _diagnosis_anchor_tokens(payload: dict[str, Any]) -> set[str]:
+    diagnosis = payload.get("diagnosis") or {}
+    value = _norm(diagnosis.get("value"))
+    tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", value)
+        if len(token) >= 4 and token not in _DIAGNOSIS_GENERIC_TOKENS
+    }
+    return tokens
+
+
+def _segment_is_current_diagnosis_context(text: str, diagnosis_tokens: set[str]) -> bool:
+    normalized = _norm(text)
+    if any(marker in normalized for marker in _CURRENT_CONTEXT_MARKERS):
+        return True
+    if diagnosis_tokens and any(token in normalized for token in diagnosis_tokens):
+        return True
+    return False
+
+
+def _candidate_states(document: ParsedDocument, payload: dict[str, Any]) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
+    diagnosis_tokens = _diagnosis_anchor_tokens(payload)
     for segment in document.segments:
         text = segment.text
+        if not _segment_is_current_diagnosis_context(text, diagnosis_tokens):
+            continue
         for canonical, pattern, information_type in _STATE_PATTERNS:
             for match in pattern.finditer(text):
                 if _is_uncertain_or_negated(text, match.start(), match.end()):
@@ -131,13 +182,15 @@ def resolve_disease_state(
     document: ParsedDocument,
     payload: dict[str, Any],
 ) -> DiseaseStateResolution:
-    """Promote only explicit, unambiguous source-supported disease-state evidence.
+    """Promote only explicit, unambiguous source-supported current disease-state evidence.
 
     This resolver runs after model extraction. It never overwrites a substantive
     model disease state, never adjudicates a conflict, and never uses external
-    medical knowledge. A source phrase such as "liver metastases" can support a
-    derived canonical state of "metastatic" because the metastatic concept is
-    directly present in the source text. Uncertain/negated mentions are ignored.
+    medical knowledge. Candidate phrases must occur in a segment anchored to the
+    extracted current diagnosis or explicit current-context language. A phrase
+    such as "liver metastases" may support a derived canonical state of
+    "metastatic" because the metastatic concept is directly present in the
+    source text. Uncertain, negated, remote, and conflicting mentions are ignored.
     """
 
     out = deepcopy(payload)
@@ -150,13 +203,13 @@ def resolve_disease_state(
         warnings.append("Disease-state resolver abstained because a relevant unresolved conflict is present.")
         return DiseaseStateResolution(out, events, warnings)
 
-    candidates = _candidate_states(document)
+    candidates = _candidate_states(document, out)
     canonical_states = sorted({candidate["canonical"] for candidate in candidates})
     if not canonical_states:
         return DiseaseStateResolution(out, events, warnings)
     if len(canonical_states) != 1:
         warnings.append(
-            "Disease-state resolver found multiple distinct explicit state candidates and abstained: "
+            "Disease-state resolver found multiple distinct explicit current-state candidates and abstained: "
             + ", ".join(canonical_states)
         )
         return DiseaseStateResolution(out, events, warnings)
@@ -168,9 +221,8 @@ def resolve_disease_state(
     selected = next((item for item in matching if item["information_type"] == "observed"), matching[0])
 
     before = deepcopy(out.get("disease_state"))
-    field = "disease_state"
     after = {
-        "field": field,
+        "field": "disease_state",
         "value": canonical,
         "status": "confirmed",
         "confidence": 1.0,
@@ -180,7 +232,7 @@ def resolve_disease_state(
     }
     out["disease_state"] = after
     warning = (
-        f"Disease-state consistency resolver populated '{canonical}' from explicit source-supported evidence "
+        f"Disease-state consistency resolver populated '{canonical}' from explicit source-supported current-disease evidence "
         "because the primary extraction left disease_state unresolved."
     )
     out.setdefault("extraction_warnings", [])

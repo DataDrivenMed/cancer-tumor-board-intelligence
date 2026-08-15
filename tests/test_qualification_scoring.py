@@ -1,6 +1,7 @@
 from qualification.scoring import (
     _canonical_missing_concept,
     _diagnosis_matches,
+    _disease_state_matches,
     _is_positive_prohibited_assertion,
     _missing_concept_present,
     _safe_null_diagnosis_abstention,
@@ -33,8 +34,17 @@ def test_diagnosis_matcher_accepts_standard_abbreviations():
 def test_diagnosis_matcher_preserves_uncertain_hematologic_category():
     assert _diagnosis_matches("suspected hematologic malignancy", "suspected hematologic malignancy")
     assert _diagnosis_matches("hematologic malignancy, suspected", "suspected hematologic malignancy")
+    assert _diagnosis_matches("hematologic malignancy (suspected)", "suspected hematologic malignancy")
     assert _diagnosis_matches("hematologic malignancy", "suspected hematologic malignancy")
     assert not _diagnosis_matches("acute myeloid leukemia", "suspected hematologic malignancy")
+
+
+def test_disease_state_matcher_normalizes_progression_language():
+    assert _disease_state_matches("progressive", "progression")
+    assert _disease_state_matches("progressive disease", "progression")
+    assert _disease_state_matches("progressing", "progression")
+    assert _disease_state_matches("disease progression", "progressive")
+    assert not _disease_state_matches("relapsed", "progression")
 
 
 def test_q10_uncertainty_requires_wording_or_uncertain_status():

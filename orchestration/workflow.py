@@ -15,20 +15,18 @@ from agents.guideline import GuidelineAgent
 from agents.literature import LiteratureAgent
 from agents.molecular import MolecularInterpretationAgent
 from agents.translational import TranslationalBiologyAgent
-from agents.mock_agents import (
-    TrialMockAgent,
-    SafetyMockAgent,
-)
+from agents.clinical_trials import ClinicalTrialsAgent
+from agents.mock_agents import SafetyMockAgent
 
 
 AGENT_REGISTRY = {
     "guideline": GuidelineAgent(PRODUCTION_GUIDELINE_STORE),
     "molecular": MolecularInterpretationAgent(PRODUCTION_MOLECULAR_STORE, production_mode=True),
     "translational": TranslationalBiologyAgent(PRODUCTION_TRANSLATIONAL_STORE, production_mode=True),
-    # Production-safe default: live PubMed access is opt-in and requires an explicit
-    # NCBI contact email. The Streamlit Literature page exercises the live adapter.
+    # Production-safe defaults: live public-source access is opt-in. Dedicated
+    # validation pages exercise the live PubMed and ClinicalTrials.gov adapters.
     "literature": LiteratureAgent(),
-    "clinical_trials": TrialMockAgent(),
+    "clinical_trials": ClinicalTrialsAgent(),
     "safety": SafetyMockAgent(),
 }
 
@@ -177,8 +175,8 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
 
     preliminary = (
         "Skeleton synthesis only. The application has routed the case through specialist contracts. "
-        "Guideline, literature, molecular, and translational layers enforce explicit evidence boundaries. "
-        "Production molecular and translational stores remain empty until independently verified disease- and alteration-specific evidence records are loaded."
+        "Guideline, literature, molecular, translational, and clinical-trials layers enforce explicit evidence boundaries. "
+        "Live public-source retrieval remains explicit opt-in, and trial matching never establishes patient eligibility."
     )
 
     red_team = [

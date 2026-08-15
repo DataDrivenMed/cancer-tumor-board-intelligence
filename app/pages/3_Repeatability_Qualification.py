@@ -92,7 +92,7 @@ with st.expander("Frozen protocol", expanded=True):
 **Target:** {TARGET_REPEATABILITY_RUNS} independent complete runs / {TARGET_REPEATABILITY_RUNS * len(CASES)} case executions  
 **Suite fingerprint:** `{protocol['suite_fingerprint'][:16]}...`
 
-A run is counted only if all 10 cases return a score under this frozen configuration. Model or protocol changes require a new study.
+A formal repeatability PASS is deliberately stricter than the ordinary development core gate: every scored core metric must equal 100%, semantic integrity must pass, exact provenance must be preserved, and prohibited/unsupported assertions must remain zero. A model or protocol change requires a new study.
         """
     )
 
@@ -114,9 +114,16 @@ if "repeatability_study" not in st.session_state:
         st.session_state.repeatability_study = new_study(model_name=model_name, reasoning_effort=reasoning_effort)
 
 st.divider()
-st.subheader("Restore or import study")
-st.caption("Use this after a Streamlit reboot. The downloaded study JSON is the durable copy because Community Cloud runtime storage can be ephemeral.")
-uploaded_study = st.file_uploader("Optional: restore a repeatability study JSON", type=["json"], key="repeatability_study_upload")
+st.subheader("Restore study after a reboot")
+st.caption(
+    "The downloaded study JSON is the durable study record. Streamlit Community Cloud runtime storage can be ephemeral, "
+    "so download the JSON after every completed trial."
+)
+uploaded_study = st.file_uploader(
+    "Optional: restore a repeatability study JSON",
+    type=["json"],
+    key="repeatability_study_upload",
+)
 if uploaded_study is not None:
     try:
         candidate = json.loads(uploaded_study.getvalue().decode("utf-8"))
@@ -139,20 +146,26 @@ st.subheader("Study status")
 a, b, c, d, e = st.columns(5)
 a.metric("Runs completed", f"{summary['runs_completed']} / {TARGET_REPEATABILITY_RUNS}")
 b.metric("Case executions", f"{summary['total_case_executions']} / {TARGET_REPEATABILITY_RUNS * len(CASES)}")
-c.metric("Overall qualified", f"{summary['overall_passes']} / {summary['total_case_executions'] or 0}")
+c.metric("Overall strict PASS", f"{summary['overall_passes']} / {summary['total_case_executions'] or 0}")
 d.metric("Exact provenance", f"{summary['exact_provenance_rate'] * 100:.1f}%")
 e.metric("Prohibited assertions", summary["prohibited_assertions"])
 
 if summary["runs_completed"]:
-    stability_rows = []
-    for case_id, row in summary["case_stability"].items():
-        stability_rows.append(
-            {
-                "Case": case_id,
-                "Overall PASS": f"{row['passes']}/{row['runs']}",
-                "Pass rate": f"{row['pass_rate'] * 100:.1f}%",
-            }
-        )
+    st.markdown("### Core metric means")
+    metric_rows = [
+        {"Metric": name.replace("_", " ").title(), "Mean": f"{value * 100:.1f}%"}
+        for name, value in summary["metric_means"].items()
+    ]
+    st.dataframe(pd.DataFrame(metric_rows), use_container_width=True, hide_index=True)
+
+    stability_rows = [
+        {
+            "Case": case_id,
+            "Overall strict PASS": f"{row['passes']}/{row['runs']}",
+            "Pass rate": f"{row['pass_rate'] * 100:.1f}%",
+        }
+        for case_id, row in summary["case_stability"].items()
+    ]
     st.markdown("### Case stability")
     st.dataframe(pd.DataFrame(stability_rows), use_container_width=True, hide_index=True)
 
@@ -163,9 +176,10 @@ if summary["runs_completed"]:
             {
                 "Run": index,
                 "Timestamp (UTC)": run.get("run_timestamp_utc"),
-                "Extraction PASS": f"{sum(1 for r in case_results if r.get('extraction_pass'))}/10",
+                "Core gate PASS": f"{sum(1 for r in case_results if r.get('core_gate_pass'))}/10",
+                "Strict extraction PASS": f"{sum(1 for r in case_results if r.get('strict_extraction_pass'))}/10",
                 "Semantic PASS": f"{sum(1 for r in case_results if r.get('semantic_pass'))}/10",
-                "Overall PASS": f"{sum(1 for r in case_results if r.get('overall_pass'))}/10",
+                "Overall strict PASS": f"{sum(1 for r in case_results if r.get('overall_pass'))}/10",
                 "Exact provenance": f"{float(run.get('exact_provenance_rate', 0.0)) * 100:.1f}%",
                 "Prohibited": run.get("prohibited_assertions", 0),
             }
@@ -180,14 +194,15 @@ if summary["runs_completed"]:
         if not row.get("overall_pass")
     ]
     if failing:
-        st.error("At least one case execution failed overall qualification. Do not hide this with an aggregate average.")
+        st.error("At least one case execution failed strict overall qualification. It remains visible and is not hidden by an aggregate average.")
         st.dataframe(
             pd.DataFrame(
                 [
                     {
                         "Run": idx,
                         "Case": row.get("case_id"),
-                        "Extraction": "PASS" if row.get("extraction_pass") else "FAIL",
+                        "Core gate": "PASS" if row.get("core_gate_pass") else "FAIL",
+                        "Strict extraction": "PASS" if row.get("strict_extraction_pass") else "FAIL",
                         "Semantic": "PASS" if row.get("semantic_pass") else "FAIL",
                         "Finding codes": ", ".join(row.get("semantic_finding_codes", [])),
                     }
@@ -220,18 +235,33 @@ st.divider()
 st.subheader("Run next independent trial")
 remaining = TARGET_REPEATABILITY_RUNS - summary["runs_completed"]
 if remaining <= 0:
-    all_case_executions_pass = summary["overall_passes"] == TARGET_REPEATABILITY_RUNS * len(CASES)
-    zero_unsupported = summary["unsupported_provenance_sum"] == 0.0
-    if all_case_executions_pass and summary["exact_provenance_rate"] == 1.0 and summary["prohibited_assertions"] == 0 and zero_unsupported:
-        st.success("Repeatability target completed: all 50 case executions passed overall qualification with exact provenance and zero prohibited/unsupported assertions.")
+    expected_total = TARGET_REPEATABILITY_RUNS * len(CASES)
+    final_pass = (
+        summary["overall_passes"] == expected_total
+        and summary["all_core_metrics_perfect"]
+        and summary["exact_provenance_rate"] == 1.0
+        and summary["prohibited_assertions"] == 0
+        and summary["unsupported_provenance_sum"] == 0.0
+    )
+    if final_pass:
+        st.success(
+            "Repeatability target completed: all 50 case executions passed strict overall qualification, "
+            "all core metrics were 100%, exact provenance was 100%, and prohibited/unsupported assertions were zero."
+        )
     else:
-        st.warning("Five runs are complete, but one or more qualification targets were not met. Review case-level instability before any downstream reasoning work.")
+        st.warning(
+            "Five runs are complete, but one or more pre-specified qualification targets were not met. "
+            "Review case-level instability before any downstream reasoning work."
+        )
 else:
     st.write(
         f"The next trial will make 10 sequential model calls. {remaining} full trial(s) remain. "
         "Do not change the model, reasoning effort, suite, prompt, scorer, normalization, or semantic gate during this study."
     )
-    acknowledge = st.checkbox("I understand this will run all 10 frozen synthetic cases and use inference credits.", key="repeatability_ack")
+    acknowledge = st.checkbox(
+        "I understand this will run all 10 frozen synthetic cases and use inference credits.",
+        key="repeatability_ack",
+    )
     if st.button("Run next repeatability trial", type="primary", disabled=not acknowledge):
         scores = []
         diagnostics = {}
@@ -241,7 +271,11 @@ else:
 
         for idx, gold in enumerate(CASES, start=1):
             status.write(f"Run {summary['runs_completed'] + 1} • {gold.case_id}: {gold.title}")
-            document = parse_text(gold.narrative, document_id=f"REPEAT-{gold.case_id}", filename=f"{gold.case_id}.txt")
+            document = parse_text(
+                gold.narrative,
+                document_id=f"REPEAT-{gold.case_id}",
+                filename=f"{gold.case_id}.txt",
+            )
             try:
                 package = extract_case(
                     document=document,
@@ -249,8 +283,7 @@ else:
                     model=model_name,
                     case_id=f"REPEAT-{gold.case_id}",
                 )
-                score = score_case(gold, package)
-                scores.append(score)
+                scores.append(score_case(gold, package))
                 diagnostics[gold.case_id] = {
                     "provenance_total": package.provenance_total,
                     "provenance_verified": package.provenance_verified,
@@ -281,7 +314,7 @@ else:
         if failure is not None or len(scores) != len(CASES):
             st.error(
                 "This trial is incomplete and was NOT added to the repeatability denominator. "
-                "Resolve the endpoint/tool failure before trying another complete trial."
+                "Resolve the endpoint/tool failure before attempting another complete trial."
             )
             st.download_button(
                 "Download incomplete trial JSON",
@@ -291,7 +324,7 @@ else:
             )
         else:
             try:
-                updated = add_run(st.study if False else st.session_state.repeatability_study, benchmark_payload)
+                updated = add_run(st.session_state.repeatability_study, benchmark_payload)
                 st.session_state.repeatability_study = updated
                 _persist_best_effort(updated)
                 st.success("Complete 10-case trial added to the frozen repeatability study.")
@@ -301,7 +334,8 @@ else:
 
 st.markdown("### Qualification interpretation")
 st.write(
-    "The pre-specified repeatability target is five complete runs (50 case executions). "
-    "A perfect aggregate average is not sufficient if an individual case is unstable. "
-    "Any failed overall case execution is retained and surfaced. Completing this phase supports reproducibility of the development extraction benchmark; it does not establish clinical validity or authorize autonomous clinical reasoning."
+    "The pre-specified target is five complete runs (50 case executions). A perfect average is not sufficient if an individual case is unstable. "
+    "Every core metric must remain 100% for every counted case execution, semantic integrity must pass, exact provenance must remain 100%, "
+    "and prohibited/unsupported assertions must remain zero. Completing this phase supports reproducibility of the development extraction benchmark; "
+    "it does not establish clinical validity or authorize autonomous clinical reasoning."
 )

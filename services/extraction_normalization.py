@@ -26,6 +26,12 @@ _CURRENT_MEDICATION_MARKERS = (
     "medication list",
 )
 
+_DIAGNOSIS_CONFLICT_FIELDS = (
+    "diagnosis",
+    "diagnostic interpretation",
+    "pathology diagnosis",
+)
+
 
 def _norm(value: Any) -> str:
     return " ".join(str(value or "").lower().split())
@@ -58,6 +64,45 @@ def _missing_mentions_regimen(missing_items: list[dict[str, Any]], regimen: str)
     return False
 
 
+def _is_diagnosis_level_conflict(conflict: dict[str, Any]) -> bool:
+    field = _norm(conflict.get("field"))
+    if field in _DIAGNOSIS_CONFLICT_FIELDS or "diagnosis" in field:
+        return True
+    return False
+
+
+def _normalize_unresolved_diagnosis_conflict(out: dict[str, Any]) -> None:
+    """Prevent a confirmed canonical diagnosis when the same output says diagnosis is unresolved.
+
+    The extraction conflict schema represents unresolved conflicts only. Therefore, when a
+    diagnosis-level conflict is present, choosing one side as a confirmed canonical diagnosis
+    is internally inconsistent. We preserve the conflict entries themselves and make the
+    canonical diagnosis explicitly conflicting without selecting either side.
+    """
+    conflicts = out.get("conflicts", []) or []
+    if not any(_is_diagnosis_level_conflict(conflict) for conflict in conflicts):
+        return
+
+    diagnosis = out.get("diagnosis")
+    if not isinstance(diagnosis, dict):
+        return
+
+    status = _norm(diagnosis.get("status"))
+    value = diagnosis.get("value")
+    if status == "conflicting" and value is None:
+        return
+
+    diagnosis["value"] = None
+    diagnosis["status"] = "conflicting"
+    diagnosis["confidence"] = min(float(diagnosis.get("confidence", 1.0)), 0.5)
+    diagnosis["source_segment_ids"] = []
+    diagnosis["source_excerpt"] = None
+    _append_warning(
+        out,
+        "Semantic normalization cleared a selected canonical diagnosis because an unresolved diagnosis-level conflict is present.",
+    )
+
+
 def normalize_extraction_output(raw: dict[str, Any]) -> dict[str, Any]:
     """Repair narrow representation errors without adding clinical facts.
 
@@ -67,6 +112,10 @@ def normalize_extraction_output(raw: dict[str, Any]) -> dict[str, Any]:
     or treatment eligibility.
     """
     out = deepcopy(raw)
+
+    # A diagnosis-level conflict cannot coexist with a confirmed canonical choice.
+    # This is a representation-consistency rule, not a clinical adjudication.
+    _normalize_unresolved_diagnosis_conflict(out)
 
     # Scalar fields must remain scalar. A JSON object encoded inside a string is
     # treated as malformed representation, not as a care-site value.
@@ -126,8 +175,6 @@ def normalize_extraction_output(raw: dict[str, Any]) -> dict[str, Any]:
                     f"Semantic normalization populated confirmed current-medication value from its source-supported field label '{fact['field']}'.",
                 )
             else:
-                # Without an explicit current assertion, a confirmed-null current
-                # medication is not safe to retain.
                 _append_warning(
                     out,
                     f"Semantic normalization removed incomplete confirmed current-medication entry '{fact.get('field', 'medication')}'.",

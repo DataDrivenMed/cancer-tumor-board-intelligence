@@ -13,6 +13,14 @@ def test_parse_text_assigns_stable_segment_ids():
     assert document.segments[0].text == "First fact."
 
 
+def test_numbered_text_keeps_locator_outside_authoritative_segment_id():
+    document = parse_text("First fact.", document_id="TEST")
+    rendered = document.numbered_text()
+    assert rendered.startswith("[S0001]")
+    assert "[S0001|paragraph=1]" not in rendered
+    assert "paragraph=1" in rendered
+
+
 def test_exact_excerpt_verifies_against_segment():
     document = parse_text("FLT3-ITD detected with variant allele frequency 31%.", document_id="TEST")
     provenance, verified = _verified_provenance(
@@ -35,6 +43,17 @@ def test_paraphrased_excerpt_fails_verification():
     assert provenance.source_verified is False
 
 
+def test_composite_locator_is_not_accepted_as_segment_id():
+    document = parse_text("patient with a suspected hematologic malignancy", document_id="TEST")
+    provenance, verified = _verified_provenance(
+        document,
+        ["S0001|paragraph=1"],
+        "patient with a suspected hematologic malignancy",
+    )
+    assert verified is False
+    assert provenance.source_verified is False
+
+
 def test_pending_results_must_be_represented_as_missing_items():
     instructions = SYSTEM_INSTRUCTIONS.lower()
     assert "must also appear in missing_items" in instructions
@@ -50,13 +69,25 @@ def test_explicit_current_disease_state_must_be_preserved():
     assert "remote historical conditions" in instructions
 
 
-def test_provenance_metric_counts_supported_assertions_not_empty_unknown_placeholders():
+def test_prompt_requires_exact_segment_token_only():
+    instructions = SYSTEM_INSTRUCTIONS.lower()
+    assert "exact authoritative segment id token" in instructions
+    assert "never append page, paragraph, locator" in instructions
+
+
+def test_provenance_metric_counts_all_substantive_assertions_not_empty_placeholders():
     confirmed = Fact(field="diagnosis", value="mantle cell lymphoma", status=DataStatus.CONFIRMED)
     conflicting = Fact(field="stage", value="III vs IV", status=DataStatus.CONFLICTING)
+    uncertain_substantive = Fact(
+        field="diagnosis",
+        value="suspected hematologic malignancy",
+        status=DataStatus.UNKNOWN,
+    )
     unknown = Fact(field="disease_state", value=None, status=DataStatus.NOT_DOCUMENTED)
     pending_without_value = Fact(field="molecular", value=None, status=DataStatus.PENDING)
 
     assert _fact_requires_verified_provenance(confirmed)
     assert _fact_requires_verified_provenance(conflicting)
+    assert _fact_requires_verified_provenance(uncertain_substantive)
     assert not _fact_requires_verified_provenance(unknown)
     assert not _fact_requires_verified_provenance(pending_without_value)

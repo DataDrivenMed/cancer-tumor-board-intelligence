@@ -39,10 +39,19 @@ class AgentOutput(BaseModel):
 
 
 class RoutingDecision(BaseModel):
+    router_version: str = "1.0.0"
     question_type: str
+    question_domains: list[str] = Field(default_factory=list)
     complexity: Literal["routine", "intermediate", "complex", "high_complexity"]
     selected_agents: list[str]
+    omitted_agents: list[str] = Field(default_factory=list)
+    required_agents: list[str] = Field(default_factory=list)
+    conditional_agents: list[str] = Field(default_factory=list)
     rationale: list[str] = Field(default_factory=list)
+    routing_warnings: list[str] = Field(default_factory=list)
+    requires_parallel_execution: bool = True
+    requires_human_review: bool = False
+    safe_to_execute: bool = True
 
 
 class RedTeamFinding(BaseModel):

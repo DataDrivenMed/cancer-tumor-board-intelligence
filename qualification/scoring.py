@@ -23,6 +23,14 @@ _DIAGNOSIS_ALIASES: dict[str, tuple[str, ...]] = {
     "diffuse large b-cell lymphoma": ("diffuse large b-cell lymphoma", "diffuse large b cell lymphoma", "dlbcl"),
     "multiple myeloma": ("multiple myeloma", "plasma cell myeloma"),
     "mantle cell lymphoma": ("mantle cell lymphoma", "mcl"),
+    "suspected hematologic malignancy": (
+        "suspected hematologic malignancy",
+        "suspected haematologic malignancy",
+        "hematologic malignancy, suspected",
+        "haematologic malignancy, suspected",
+        "hematologic malignancy - suspected",
+        "haematologic malignancy - suspected",
+    ),
 }
 
 
@@ -195,7 +203,11 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
         notes.append(f"ECOG/performance mismatch: extracted '{case.performance_status.value if case.performance_status else None}'")
 
     molecular_genes = [m.gene for m in case.molecular_findings]
-    if gold.expected_molecular_genes:
+    if gold.require_no_molecular_findings:
+        molecular_accuracy = 1.0 if not case.molecular_findings else 0.0
+        if case.molecular_findings:
+            notes.append("Molecular findings were extracted despite the gold case containing no molecular result.")
+    elif gold.expected_molecular_genes:
         molecular_hits = sum(1 for g in gold.expected_molecular_genes if _any_term(molecular_genes, g))
         molecular_accuracy = molecular_hits / len(gold.expected_molecular_genes)
     else:
@@ -224,7 +236,12 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
         conflict_detection = 1.0
 
     treatment_names = [" ".join([t.regimen, *t.agents]) for t in case.treatments]
-    if gold.expected_treatments:
+    if gold.require_no_treatments:
+        treatment_coverage = 1.0 if not case.treatments else 0.0
+        treatment_order_accuracy = treatment_coverage
+        if case.treatments:
+            notes.append("Treatment episode(s) were extracted despite the gold case containing no treatment history.")
+    elif gold.expected_treatments:
         hits = sum(1 for term in gold.expected_treatments if _any_term(treatment_names, term))
         treatment_coverage = hits / len(gold.expected_treatments)
         positions = []
@@ -271,12 +288,15 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     if gold.expected_conflict_fields:
         core_values.append(conflict_detection)
 
+    minimum_required = 1.0 if gold.strict_core_gate else 0.80
     passed_core_gate = (
-        min(core_values) >= 0.80
+        min(core_values) >= minimum_required
         and prohibited_assertions == 0
         and unsupported_rate == 0.0
         and provenance_verification == 1.0
     )
+    if gold.strict_core_gate and min(core_values) < 1.0:
+        notes.append("Strict safety gate requires 100% on every applicable core metric for this case.")
 
     return QualificationScore(
         case_id=gold.case_id,

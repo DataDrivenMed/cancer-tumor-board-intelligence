@@ -7,6 +7,7 @@ from services.quality import inspect_case
 from services.semantic_integrity import inspect_semantic_integrity, semantic_integrity_passes
 from orchestration.router import route_case
 from agents.case_integrity import run_case_integrity
+from agents.missing_information import run_missing_information
 from agents.mock_agents import (
     GuidelineMockAgent,
     MolecularMockAgent,
@@ -64,6 +65,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
             ],
             "semantic_integrity_findings": semantic_findings,
             "case_integrity_report": None,
+            "missing_information_report": None,
             "final_decision": final,
             "audit_events": audit,
         }
@@ -108,6 +110,50 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
             ],
             "semantic_integrity_findings": semantic_findings,
             "case_integrity_report": integrity_report,
+            "missing_information_report": None,
+            "final_decision": final,
+            "audit_events": audit,
+        }
+
+    missing_report = run_missing_information(case)
+    audit.append(
+        audit_event(
+            "missing_information_analysis_complete",
+            f"disposition={missing_report.disposition.value}; items={len(missing_report.items)}; "
+            f"blocking={missing_report.blocking_count}; safe_to_route={missing_report.safe_to_route_to_specialists}",
+        )
+    )
+    if not missing_report.safe_to_route_to_specialists:
+        final = FinalDecision(
+            decision_state="abstain",
+            decision_support_strength="insufficient",
+            abstention_reason="Decision-critical information is missing or unresolved.",
+            major_uncertainties=[item.field for item in missing_report.items if item.priority.value in {"high", "critical"}],
+            discussion_priorities=[
+                f"{item.action.value.replace('_', ' ').title()}: {item.field}"
+                for item in missing_report.items
+                if item.recommendation_blocking
+            ],
+        )
+        audit.append(audit_event("workflow_abstained", "Missing Information Agent blocked specialist routing"))
+        return {
+            "case": case,
+            "routing": None,
+            "specialist_outputs": {},
+            "preliminary_synthesis": "",
+            "red_team_findings": [
+                RedTeamFinding(
+                    severity="critical" if item.priority.value == "critical" else "major",
+                    category="missing_information",
+                    issue=f"{item.field}: {item.reason}",
+                    effect_on_recommendation="Specialist reasoning is blocked until this decision-critical information is resolved.",
+                )
+                for item in missing_report.items
+                if item.recommendation_blocking
+            ],
+            "semantic_integrity_findings": semantic_findings,
+            "case_integrity_report": integrity_report,
+            "missing_information_report": missing_report,
             "final_decision": final,
             "audit_events": audit,
         }
@@ -140,7 +186,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
         decision_state="abstain",
         decision_support_strength="insufficient",
         abstention_reason="The skeleton build has no validated evidence connectors and therefore cannot support a clinical recommendation.",
-        major_uncertainties=[m.field for m in missing if m.importance in {"high", "critical"}],
+        major_uncertainties=[item.field for item in missing_report.items if item.priority.value in {"high", "critical"}],
         discussion_priorities=[
             "Verify the structured patient facts.",
             "Resolve any decision-critical missing information.",
@@ -157,6 +203,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
         "red_team_findings": red_team,
         "semantic_integrity_findings": semantic_findings,
         "case_integrity_report": integrity_report,
+        "missing_information_report": missing_report,
         "final_decision": final,
         "audit_events": audit,
     }

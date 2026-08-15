@@ -40,6 +40,10 @@ def test_build_payload_and_restore_score():
     assert payload["completed"] is True
     assert payload["model_name"] == "test-model"
     assert payload["scores"][0]["case_id"] == "Q01"
+    assert payload["schema_version"] == "1.1"
+    assert payload["protocol"]["qualification_suite_version"] == "1.0.0"
+    assert payload["protocol"]["suite_fingerprint"]
+    assert len(payload["protocol"]["suite_fingerprint"]) == 64
 
     restored = score_from_dict(payload["scores"][0])
     assert restored.case_id == "Q01"
@@ -64,6 +68,7 @@ def test_persist_and_load_latest_run(tmp_path: Path):
     assert loaded is not None
     assert loaded["completed"] is True
     assert loaded["scores"][0]["case_id"] == "Q01"
+    assert loaded["protocol"]["suite_fingerprint"] == payload["protocol"]["suite_fingerprint"]
 
 
 def test_csv_contains_safety_metrics():

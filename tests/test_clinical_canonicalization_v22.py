@@ -75,6 +75,26 @@ def test_stage_conflict_is_separated_from_disease_state():
     assert result.stage["status"] == "conflicting"
 
 
+def test_stage_conflict_blocks_metastatic_collapse_even_if_model_selected_metastatic():
+    doc = parse_text("Clinic note records stage IIIA. PET/CT identifies a distant bone metastasis and labels stage IV.")
+    payload = _payload(
+        "lung adenocarcinoma",
+        disease_value="metastatic",
+        disease_status="confirmed",
+        disease_excerpt="distant bone metastasis",
+        conflicts=[{
+            "field": "stage",
+            "value_a": "stage IIIA",
+            "value_b": "stage IV",
+            "severity": "high",
+            "source_segment_ids": ["S0001"],
+        }],
+    )
+    result = canonicalize_clinical_fields_v22(document=doc, payload=payload)
+    assert result.payload["disease_state"]["value"] is None
+    assert result.payload["disease_state"]["status"] == "conflicting"
+
+
 def test_progression_repairs_to_exact_source_excerpt():
     doc = parse_text(
         "Metastatic castration-resistant prostate adenocarcinoma. Current imaging demonstrates radiographic progression."
@@ -82,6 +102,21 @@ def test_progression_repairs_to_exact_source_excerpt():
     payload = _payload(
         "prostate adenocarcinoma",
         disease_value="radiographic progression",
+        disease_status="confirmed",
+        disease_excerpt="Metastatic castration-resistant prostate adenocarcinoma. Current imaging demonstrates radiographic progression.",
+    )
+    result = canonicalize_clinical_fields_v22(document=doc, payload=payload)
+    assert result.payload["disease_state"]["value"] == "progressive"
+    assert result.payload["disease_state"]["source_excerpt"] == "radiographic progression"
+
+
+def test_progression_takes_precedence_over_metastatic_extent_in_composite_value():
+    doc = parse_text(
+        "Metastatic castration-resistant prostate adenocarcinoma. Current imaging demonstrates radiographic progression."
+    )
+    payload = _payload(
+        "prostate adenocarcinoma",
+        disease_value="metastatic castration-resistant, progressive",
         disease_status="confirmed",
         disease_excerpt="Metastatic castration-resistant prostate adenocarcinoma. Current imaging demonstrates radiographic progression.",
     )

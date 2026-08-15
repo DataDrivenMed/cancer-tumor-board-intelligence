@@ -35,17 +35,52 @@ The gate is deliberately deterministic. It does not infer diagnosis, stage, trea
     """
 )
 
-payload = load_latest_run(PROJECT_ROOT / "runtime_data" / "qualification_runs")
+# Prefer the cases currently present in the shared Streamlit session. This lets a
+# reviewer run Q05/Q07/Q08 individually on the Extraction Benchmark page and then
+# move directly here without first downloading a JSON file.
+payload = None
+session_diagnostics = st.session_state.get("benchmark_diagnostics", {}) or {}
+session_scores = st.session_state.get("benchmark_scores", {}) or {}
+
+if session_diagnostics:
+    score_rows = []
+    for case_id, score in session_scores.items():
+        if hasattr(score, "as_dict"):
+            score_rows.append(score.as_dict())
+        elif isinstance(score, dict):
+            score_rows.append(score)
+
+    payload = {
+        "schema_version": "session",
+        "run_timestamp_utc": "current Streamlit session",
+        "model_name": "current configured model",
+        "reasoning_effort": "current configured reasoning",
+        "completed": False,
+        "failure": None,
+        "scores": score_rows,
+        "diagnostics": session_diagnostics,
+    }
+    st.success(
+        f"Using {len(session_diagnostics)} case(s) from the current Extraction Benchmark session. "
+        "No JSON upload is required."
+    )
+else:
+    payload = load_latest_run(PROJECT_ROOT / "runtime_data" / "qualification_runs")
+
 uploaded = st.file_uploader("Optional: upload a saved qualification benchmark JSON", type=["json"])
 if uploaded is not None:
     try:
         payload = json.loads(uploaded.getvalue().decode("utf-8"))
+        st.info("Using the uploaded benchmark JSON instead of session/runtime data.")
     except Exception as exc:
         st.error(f"Could not read benchmark JSON: {exc}")
         st.stop()
 
 if not payload:
-    st.info("No saved benchmark run is available. Run the extraction benchmark or upload a saved benchmark JSON.")
+    st.info(
+        "No benchmark cases are available. Run one or more cases on Extraction Benchmark, then return to this page. "
+        "You may also upload a previously saved benchmark JSON."
+    )
     st.stop()
 
 st.caption(

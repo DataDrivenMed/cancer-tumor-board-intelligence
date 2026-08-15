@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -14,6 +15,13 @@ if str(PROJECT_ROOT) not in sys.path:
 from agents.extraction import extract_case
 from qualification.cases import CASES
 from qualification.scoring import score_case, summarize
+from services.benchmark_persistence import (
+    build_run_payload,
+    load_latest_run,
+    payload_to_csv,
+    persist_run,
+    score_from_dict,
+)
 from services.document_parser import parse_text
 from services.model_gateway import ModelGatewayError
 
@@ -26,6 +34,43 @@ def get_secret(name: str, default: str | None = None) -> str | None:
         return st.secrets[name]
     except Exception:
         return default
+
+
+def _load_saved_run_into_session() -> None:
+    """Restore the most recent saved benchmark run after a browser/session reset."""
+    payload = load_latest_run(PROJECT_ROOT / "runtime_data" / "qualification_runs")
+    if not payload:
+        return
+
+    if not st.session_state.benchmark_scores:
+        st.session_state.benchmark_scores = {
+            row["case_id"]: score_from_dict(row)
+            for row in payload.get("scores", [])
+            if isinstance(row, dict) and row.get("case_id")
+        }
+    if not st.session_state.benchmark_diagnostics:
+        st.session_state.benchmark_diagnostics = payload.get("diagnostics", {}) or {}
+    st.session_state.latest_saved_run = payload
+
+
+def _results_rows(scores):
+    rows = []
+    for s in sorted(scores, key=lambda x: x.case_id):
+        rows.append({
+            "Case": s.case_id,
+            "Title": s.title,
+            "Field accuracy": round(s.field_accuracy * 100, 1),
+            "Provenance": round(s.provenance_verification * 100, 1),
+            "Missing recall": round(s.missing_information_recall * 100, 1),
+            "Conflict detection": round(s.conflict_detection * 100, 1),
+            "Molecular": round(s.molecular_accuracy * 100, 1),
+            "Treatment coverage": round(s.treatment_coverage * 100, 1),
+            "Treatment order": round(s.treatment_order_accuracy * 100, 1),
+            "Prohibited assertions": s.prohibited_assertions,
+            "Unsupported provenance %": round(s.unsupported_provenance_assertion_rate * 100, 1),
+            "Core gate": "PASS" if s.passed_core_gate else "REVIEW / FAIL",
+        })
+    return rows
 
 
 st.title("Extraction Qualification Benchmark")
@@ -46,7 +91,7 @@ This suite deliberately tests extraction failure modes before downstream oncolog
 - prohibited inferred assertions
 - unsupported-provenance assertion rate
 
-**Important limitation:** the unsupported-provenance metric checks whether confirmed claims have exact source anchors. It is not a complete semantic hallucination detector. Human adjudication remains required before claiming clinical validation.
+**Important limitation:** the unsupported-provenance metric checks whether structured claims have exact source anchors. It is not a complete semantic hallucination detector. Human adjudication remains required before claiming clinical validation.
         """
     )
 
@@ -70,6 +115,10 @@ if "benchmark_scores" not in st.session_state:
     st.session_state.benchmark_scores = {}
 if "benchmark_diagnostics" not in st.session_state:
     st.session_state.benchmark_diagnostics = {}
+if "latest_saved_run" not in st.session_state:
+    st.session_state.latest_saved_run = None
+
+_load_saved_run_into_session()
 
 case_labels = {f"{c.case_id} • {c.title}": c for c in CASES}
 selected_label = st.selectbox("Select a stress-test case", list(case_labels))
@@ -136,50 +185,21 @@ if gold.case_id in st.session_state.benchmark_diagnostics:
         st.json(diag["raw_extraction"])
 
 st.divider()
-st.subheader("Qualification results")
-scores = list(st.session_state.benchmark_scores.values())
-if not scores:
-    st.info("No qualification cases have been run in this browser session yet.")
-else:
-    rows = []
-    for s in sorted(scores, key=lambda x: x.case_id):
-        rows.append({
-            "Case": s.case_id,
-            "Title": s.title,
-            "Field accuracy": round(s.field_accuracy * 100, 1),
-            "Provenance": round(s.provenance_verification * 100, 1),
-            "Missing recall": round(s.missing_information_recall * 100, 1),
-            "Conflict detection": round(s.conflict_detection * 100, 1),
-            "Molecular": round(s.molecular_accuracy * 100, 1),
-            "Treatment coverage": round(s.treatment_coverage * 100, 1),
-            "Treatment order": round(s.treatment_order_accuracy * 100, 1),
-            "Prohibited assertions": s.prohibited_assertions,
-            "Unsupported provenance %": round(s.unsupported_provenance_assertion_rate * 100, 1),
-            "Core gate": "PASS" if s.passed_core_gate else "REVIEW / FAIL",
-        })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
-    summary = summarize(scores)
-    a, b, c, d = st.columns(4)
-    a.metric("Cases run", summary["cases_run"])
-    b.metric("Cases passing core gate", summary["cases_passing_core_gate"])
-    c.metric("Mean provenance", f"{summary['provenance_verification'] * 100:.1f}%")
-    d.metric("Prohibited assertions", summary["prohibited_assertions"])
-
-    st.markdown("### Qualification policy")
-    st.write(
-        "The extraction layer should not advance to clinical reasoning based on one successful case. "
-        "For this development suite, the provisional target is 10/10 cases passing the core gate, 100% exact provenance verification, "
-        "zero prohibited assertions, and zero unsupported-provenance confirmed assertions. Any miss is reviewed before proceeding."
-    )
-
-st.divider()
-st.subheader("Optional full-suite run")
-st.caption("This makes ten sequential model calls and can consume inference credits. Individual-case review is preferred during development.")
+st.subheader("Full-suite run")
+st.caption(
+    "This makes ten sequential model calls and can consume inference credits. "
+    "Completed and partial runs are saved before the page finishes so results survive normal browser refreshes and Streamlit reruns."
+)
 allow_batch = st.checkbox("I understand this will run all 10 synthetic cases and use inference credits.")
+
 if st.button("Run all 10 qualification cases", disabled=not allow_batch):
+    # A full-suite run starts clean. Do not mix prior single-case results into its summary.
+    st.session_state.benchmark_scores = {}
+    st.session_state.benchmark_diagnostics = {}
     progress = st.progress(0)
     status = st.empty()
+    batch_failure = None
+
     for idx, case in enumerate(CASES, start=1):
         status.write(f"Running {case.case_id}: {case.title}")
         document = parse_text(case.narrative, document_id=f"QUAL-{case.case_id}", filename=f"{case.case_id}.txt")
@@ -199,8 +219,107 @@ if st.button("Run all 10 qualification cases", disabled=not allow_batch):
                 "raw_extraction": package.raw_extraction,
             }
         except Exception as exc:
+            batch_failure = {
+                "case_id": case.case_id,
+                "title": case.title,
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
             st.error(f"{case.case_id} failed safely: {exc}")
             break
         progress.progress(idx / len(CASES))
+
+    current_scores = list(st.session_state.benchmark_scores.values())
+    payload = build_run_payload(
+        scores=current_scores,
+        diagnostics=st.session_state.benchmark_diagnostics,
+        model_name=model_name,
+        reasoning_effort=reasoning_effort,
+        completed=batch_failure is None and len(current_scores) == len(CASES),
+        failure=batch_failure,
+    )
+    try:
+        persist_run(payload, PROJECT_ROOT / "runtime_data" / "qualification_runs")
+        st.session_state.latest_saved_run = payload
+    except Exception as exc:
+        st.warning(
+            "The benchmark finished, but the runtime persistence file could not be written. "
+            f"Use the download buttons below before leaving this page. Persistence error: {exc}"
+        )
+        st.session_state.latest_saved_run = payload
+
+    if batch_failure is None and len(current_scores) == len(CASES):
+        st.success("All 10 qualification cases completed and the run was saved.")
     else:
-        st.success("All 10 qualification cases completed. Review the results table above, then rerun the page if needed to refresh summary values.")
+        st.warning(
+            f"Partial suite saved: {len(current_scores)}/{len(CASES)} cases completed. "
+            "The failed model/tool call is not counted as a qualification failure for cases that never produced a score."
+        )
+
+st.divider()
+st.subheader("Qualification results")
+scores = list(st.session_state.benchmark_scores.values())
+
+if not scores:
+    st.info("No qualification cases are available in this session or in the latest saved runtime run.")
+else:
+    rows = _results_rows(scores)
+    results_df = pd.DataFrame(rows)
+    st.dataframe(results_df, use_container_width=True, hide_index=True)
+
+    summary = summarize(scores)
+    a, b, c, d, e = st.columns(5)
+    a.metric("Cases run", summary["cases_run"])
+    b.metric("Cases passing core gate", summary["cases_passing_core_gate"])
+    c.metric("Mean provenance", f"{summary['provenance_verification'] * 100:.1f}%")
+    d.metric("Prohibited assertions", summary["prohibited_assertions"])
+    e.metric(
+        "Mean unsupported provenance",
+        f"{summary['mean_unsupported_provenance_assertion_rate'] * 100:.1f}%",
+    )
+
+    saved = st.session_state.latest_saved_run
+    if saved:
+        completed_label = "COMPLETE" if saved.get("completed") else "PARTIAL"
+        st.caption(
+            f"Latest saved run: {saved.get('run_timestamp_utc', 'unknown time')} UTC • "
+            f"{completed_label} • {saved.get('model_name', 'unknown model')} • "
+            f"reasoning={saved.get('reasoning_effort', 'unknown')}"
+        )
+        if saved.get("failure"):
+            failure = saved["failure"]
+            st.warning(
+                "Saved run stopped before completion: "
+                f"{failure.get('case_id', 'unknown case')} • {failure.get('error_type', 'error')} • "
+                f"{failure.get('message', '')}"
+            )
+
+        json_bytes = json.dumps(saved, indent=2, ensure_ascii=False, default=str).encode("utf-8")
+        csv_bytes = payload_to_csv(saved).encode("utf-8")
+        b1, b2 = st.columns(2)
+        b1.download_button(
+            "Download benchmark results (JSON)",
+            data=json_bytes,
+            file_name="qualification_benchmark_latest.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+        b2.download_button(
+            "Download benchmark results (CSV)",
+            data=csv_bytes,
+            file_name="qualification_benchmark_latest.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+    st.info(
+        "Runtime persistence survives normal page reruns and browser-session resets while the Streamlit app instance remains available. "
+        "Streamlit Community Cloud storage is ephemeral across some app restarts/redeployments, so download the JSON after important runs."
+    )
+
+    st.markdown("### Qualification policy")
+    st.write(
+        "The extraction layer should not advance to clinical reasoning based on one successful case. "
+        "For this development suite, the provisional target is 10/10 cases passing the core gate, 100% exact provenance verification, "
+        "zero prohibited assertions, and zero unsupported-provenance assertions. Any miss is reviewed before proceeding."
+    )

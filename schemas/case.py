@@ -28,6 +28,8 @@ class Provenance(BaseModel):
     document_type: str | None = None
     source_section: str | None = None
     source_excerpt: str | None = None
+    source_segment_ids: list[str] = Field(default_factory=list)
+    source_verified: bool = False
     document_date: date | None = None
     author_role: str | None = None
     care_site: str | None = None
@@ -55,6 +57,7 @@ class MolecularFinding(BaseModel):
     assay: str | None = None
     laboratory_interpretation: str | None = None
     provenance: list[Provenance] = Field(default_factory=list)
+    human_verified: bool = False
 
 
 class TreatmentEpisode(BaseModel):
@@ -70,6 +73,7 @@ class TreatmentEpisode(BaseModel):
     best_response: str | None = None
     toxicities: list[str] = Field(default_factory=list)
     provenance: list[Provenance] = Field(default_factory=list)
+    human_verified: bool = False
 
 
 class ClinicalQuestion(BaseModel):
@@ -85,6 +89,7 @@ class Conflict(BaseModel):
     value_b: str
     severity: Literal["low", "moderate", "high", "critical"]
     resolution_status: Literal["unresolved", "resolved"] = "unresolved"
+    source_segment_ids: list[str] = Field(default_factory=list)
 
 
 class MissingItem(BaseModel):
@@ -100,7 +105,7 @@ class CancerTumorBoardCase(BaseModel):
     case_type: Literal["synthetic", "deidentified_research", "prospective_silent", "clinical"] = "synthetic"
     disease_program: str = "hematologic_malignancy"
     tumor_board_type: str = "hematologic_malignancy_board"
-    schema_version: str = "0.1.0"
+    schema_version: str = "0.2.0"
 
     care_site: str | None = None
     age: int | None = Field(default=None, ge=0, le=130)
@@ -110,10 +115,15 @@ class CancerTumorBoardCase(BaseModel):
     disease_state: Fact
     performance_status: Fact | None = None
 
+    pathology: list[Fact] = Field(default_factory=list)
     molecular_findings: list[MolecularFinding] = Field(default_factory=list)
-    treatments: list[TreatmentEpisode] = Field(default_factory=list)
+    imaging: list[Fact] = Field(default_factory=list)
     labs: list[Fact] = Field(default_factory=list)
     comorbidities: list[Fact] = Field(default_factory=list)
+    treatments: list[TreatmentEpisode] = Field(default_factory=list)
+    toxicities: list[Fact] = Field(default_factory=list)
+    transplant_cellular_therapy: list[Fact] = Field(default_factory=list)
+    current_medications: list[Fact] = Field(default_factory=list)
 
     clinical_question: ClinicalQuestion
     conflicts: list[Conflict] = Field(default_factory=list)

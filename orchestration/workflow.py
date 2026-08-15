@@ -4,6 +4,7 @@ from schemas.agent import FinalDecision, RedTeamFinding
 from schemas.case import CancerTumorBoardCase
 from services.audit import audit_event
 from services.quality import inspect_case
+from services.semantic_integrity import inspect_semantic_integrity, semantic_integrity_passes
 from orchestration.router import route_case
 from agents.mock_agents import (
     GuidelineMockAgent,
@@ -25,8 +26,45 @@ AGENT_REGISTRY = {
 }
 
 
-def run_workflow(case: CancerTumorBoardCase) -> dict:
+def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = None) -> dict:
     audit = [audit_event("workflow_started", case.case_id)]
+
+    semantic_findings = inspect_semantic_integrity(case, raw_extraction)
+    audit.append(
+        audit_event(
+            "semantic_integrity_check_complete",
+            f"{len(semantic_findings)} finding(s); pass={semantic_integrity_passes(semantic_findings)}",
+        )
+    )
+    if not semantic_integrity_passes(semantic_findings):
+        final = FinalDecision(
+            decision_state="abstain",
+            decision_support_strength="insufficient",
+            abstention_reason="Structured case failed deterministic semantic-integrity validation.",
+            discussion_priorities=[
+                "Resolve semantic-integrity errors in the extracted case before routing to specialist agents."
+            ],
+        )
+        audit.append(audit_event("workflow_abstained", "Semantic integrity gate failed"))
+        return {
+            "case": case,
+            "routing": None,
+            "specialist_outputs": {},
+            "preliminary_synthesis": "",
+            "red_team_findings": [
+                RedTeamFinding(
+                    severity="critical",
+                    category="semantic_integrity",
+                    issue=f.message,
+                    effect_on_recommendation="Downstream reasoning is blocked until the structured representation is corrected.",
+                )
+                for f in semantic_findings
+                if f.severity in {"error", "critical"}
+            ],
+            "semantic_integrity_findings": semantic_findings,
+            "final_decision": final,
+            "audit_events": audit,
+        }
 
     conflicts, missing = inspect_case(case)
     case.conflicts = conflicts
@@ -47,6 +85,7 @@ def run_workflow(case: CancerTumorBoardCase) -> dict:
             "specialist_outputs": {},
             "preliminary_synthesis": "",
             "red_team_findings": [],
+            "semantic_integrity_findings": semantic_findings,
             "final_decision": final,
             "audit_events": audit,
         }
@@ -94,6 +133,7 @@ def run_workflow(case: CancerTumorBoardCase) -> dict:
         "specialist_outputs": specialist_outputs,
         "preliminary_synthesis": preliminary,
         "red_team_findings": red_team,
+        "semantic_integrity_findings": semantic_findings,
         "final_decision": final,
         "audit_events": audit,
     }

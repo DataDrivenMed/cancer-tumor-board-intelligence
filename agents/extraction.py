@@ -225,6 +225,9 @@ Rules:
 10. Do not use outside medical knowledge to fill missing patient facts.
 11. Clinical question extraction should reflect the question explicitly asked in the source. If no question is stated, use question_type 'unspecified' and question 'Not explicitly documented'.
 12. Confidence represents extraction confidence only, not clinical certainty.
+13. Every decision-relevant result or fact that is explicitly pending, unavailable, not documented, not assessed, or otherwise unresolved must also appear in missing_items, even if its status is represented elsewhere in the structured case.
+14. For an explicitly pending test, create a missing_items entry naming that test, set availability to 'pending', explain that the result is not yet available, and set recommendation_blocking according to whether the source indicates or the clinical question makes clear that the pending result could affect the decision. Never convert a pending test into a positive or negative result.
+15. Before finalizing the JSON, perform a completeness audit of the source for the words or concepts pending, unavailable, not documented, not assessed, awaiting, sent, ordered, and not yet resulted. Ensure every decision-relevant unresolved item is represented in missing_items without inventing information.
 """
 
 
@@ -328,7 +331,8 @@ def extract_case(
         raise ValueError("The document contains no extractable text segments.")
 
     user_input = (
-        "Extract the tumor-board case from the source below. Segment identifiers are authoritative provenance anchors.\n\n"
+        "Extract the tumor-board case from the source below. Segment identifiers are authoritative provenance anchors. "
+        "Before returning JSON, audit all explicitly pending, unavailable, not documented, not assessed, awaiting, ordered, sent, or not-yet-resulted decision-relevant items and include each in missing_items with the correct availability.\n\n"
         + document.numbered_text()
     )
 

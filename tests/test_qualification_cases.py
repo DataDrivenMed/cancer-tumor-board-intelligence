@@ -12,13 +12,20 @@ def test_all_cases_are_synthetic_and_have_gold_targets():
         assert case.title
         assert case.target_failure_mode
         assert case.narrative
-        assert case.expected_diagnosis
+        assert case.expected_diagnosis is not None or case.expected_diagnosis_status == "conflicting"
 
 
 def test_critical_failure_modes_are_present():
     modes = " ".join(case.target_failure_mode.lower() for case in CASES)
     for concept in ["missing", "contradiction", "pending", "chronology", "molecular", "stage", "transplant", "historical", "abstention"]:
         assert concept in modes
+
+
+def test_q03_requires_unresolved_conflicting_diagnosis():
+    q03 = get_case("Q03")
+    assert q03.expected_diagnosis is None
+    assert q03.expected_diagnosis_status == "conflicting"
+    assert q03.expected_conflict_fields == ("pathology",)
 
 
 def test_get_case_round_trip():

@@ -30,6 +30,8 @@ _DIAGNOSIS_ALIASES: dict[str, tuple[str, ...]] = {
         "haematologic malignancy, suspected",
         "hematologic malignancy - suspected",
         "haematologic malignancy - suspected",
+        "hematologic malignancy",
+        "haematologic malignancy",
     ),
 }
 
@@ -55,6 +57,16 @@ def _diagnosis_matches(actual: str | None, expected: str | None) -> bool:
     if a == e and a is not None:
         return True
     return _contains(actual, expected)
+
+
+def _uncertain_diagnosis_preserved(value: str | None, status) -> bool:
+    """Require explicit uncertainty either in the diagnosis wording or its structured status."""
+    text = _norm(value)
+    status_text = _norm(getattr(status, "value", status))
+    uncertainty_terms = ("suspected", "possible", "probable", "working diagnosis", "not established", "unconfirmed")
+    if any(term in text for term in uncertainty_terms):
+        return True
+    return status_text in {"unknown", "not_documented", "not documented", "pending", "unavailable"}
 
 
 def _any_term(texts: Iterable[str], term: str) -> bool:
@@ -107,7 +119,7 @@ def _conflict_concept_present(texts: Iterable[str], concept: str) -> bool:
 
 
 def _assertion_texts(package: ExtractionPackage) -> list[str]:
-    """Return model assertions only, excluding provenance excerpts and source text."""
+    """Return structured model assertions, excluding provenance excerpts and source text."""
     case = package.case
     texts: list[str] = []
 
@@ -117,7 +129,7 @@ def _assertion_texts(package: ExtractionPackage) -> list[str]:
     facts += list(case.pathology) + list(case.imaging) + list(case.labs) + list(case.comorbidities)
     facts += list(case.toxicities) + list(case.transplant_cellular_therapy) + list(case.current_medications)
     for fact in facts:
-        if getattr(fact.status, "value", fact.status) == "confirmed" and fact.value is not None:
+        if fact.value is not None and _norm(fact.value) not in {"", "unknown", "not documented", "not_documented", "pending", "unavailable"}:
             texts.append(str(fact.value))
 
     for item in case.molecular_findings:
@@ -156,6 +168,12 @@ def _is_positive_prohibited_assertion(text: str, phrase: str) -> bool:
     return not any(neg in prefix for neg in negators)
 
 
+def _substantive_fact(fact) -> bool:
+    if fact is None or fact.value is None:
+        return False
+    return _norm(fact.value) not in {"", "unknown", "not documented", "not_documented", "pending", "unavailable", "not assessed", "not_assessed"}
+
+
 @dataclass
 class QualificationScore:
     case_id: str
@@ -180,8 +198,14 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     case = package.case
     notes: list[str] = []
 
+    diagnosis_ok = _diagnosis_matches(case.diagnosis.value, gold.expected_diagnosis)
+    if gold.case_id == "Q10":
+        diagnosis_ok = diagnosis_ok and _uncertain_diagnosis_preserved(case.diagnosis.value, case.diagnosis.status)
+        if not _uncertain_diagnosis_preserved(case.diagnosis.value, case.diagnosis.status):
+            notes.append("Diagnostic uncertainty was not preserved for the intentionally insufficient case.")
+
     key_checks = [
-        _diagnosis_matches(case.diagnosis.value, gold.expected_diagnosis),
+        diagnosis_ok,
         _contains(case.disease_state.value if case.disease_state else None, gold.expected_disease_state),
         _contains(case.performance_status.value if case.performance_status else None, gold.expected_ecog),
     ]
@@ -263,24 +287,24 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     if prohibited_hits:
         notes.append("Detected prohibited/inferred assertion(s): " + ", ".join(prohibited_hits))
 
-    confirmed_with_prov = 0
-    failed_confirmed_prov = 0
+    assertion_count = 0
+    failed_assertion_prov = 0
     all_facts = [case.diagnosis, case.disease_state]
     if case.performance_status is not None:
         all_facts.append(case.performance_status)
     all_facts += list(case.pathology) + list(case.imaging) + list(case.labs) + list(case.comorbidities) + list(case.toxicities) + list(case.transplant_cellular_therapy) + list(case.current_medications)
     for fact in all_facts:
-        if getattr(fact.status, "value", fact.status) == "confirmed":
-            confirmed_with_prov += 1
+        if _substantive_fact(fact):
+            assertion_count += 1
             if not fact.provenance or not all(p.source_verified for p in fact.provenance):
-                failed_confirmed_prov += 1
+                failed_assertion_prov += 1
     for item in [*case.molecular_findings, *case.treatments]:
-        confirmed_with_prov += 1
+        assertion_count += 1
         if not item.provenance or not all(p.source_verified for p in item.provenance):
-            failed_confirmed_prov += 1
+            failed_assertion_prov += 1
 
-    unsupported_rate = failed_confirmed_prov / confirmed_with_prov if confirmed_with_prov else 0.0
-    provenance_verification = package.provenance_rate
+    unsupported_rate = failed_assertion_prov / assertion_count if assertion_count else 0.0
+    provenance_verification = 1.0 - unsupported_rate if assertion_count else 1.0
 
     core_values = [field_accuracy, provenance_verification, molecular_accuracy, treatment_coverage, treatment_order_accuracy]
     if gold.expected_missing_fields:

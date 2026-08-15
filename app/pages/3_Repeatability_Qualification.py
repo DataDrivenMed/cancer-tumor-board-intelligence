@@ -311,6 +311,12 @@ else:
             failure=failure,
         )
 
+        # Defense in depth: stamp the exact protocol captured at page initialization.
+        # build_run_payload() also includes this metadata, but formal repeatability
+        # trials must never depend on that implicit behavior alone.
+        benchmark_payload["protocol"] = dict(protocol)
+        st.session_state.last_repeatability_trial_payload = benchmark_payload
+
         if failure is not None or len(scores) != len(CASES):
             st.error(
                 "This trial is incomplete and was NOT added to the repeatability denominator. "
@@ -331,6 +337,12 @@ else:
                 st.rerun()
             except Exception as exc:
                 st.error(f"The complete trial was not added because protocol validation failed: {exc}")
+                st.download_button(
+                    "Download rejected complete trial JSON",
+                    data=json.dumps(benchmark_payload, indent=2, default=str).encode("utf-8"),
+                    file_name="rejected_complete_repeatability_trial.json",
+                    mime="application/json",
+                )
 
 st.markdown("### Qualification interpretation")
 st.write(

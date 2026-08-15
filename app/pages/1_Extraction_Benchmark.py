@@ -73,6 +73,37 @@ def _results_rows(scores):
     return rows
 
 
+def _current_payload(*, completed: bool = False, failure=None):
+    scores = list(st.session_state.benchmark_scores.values())
+    if not scores:
+        return None
+    return build_run_payload(
+        scores=scores,
+        diagnostics=st.session_state.benchmark_diagnostics,
+        model_name=model_name,
+        reasoning_effort=reasoning_effort,
+        completed=completed,
+        failure=failure,
+    )
+
+
+def _persist_current_session(*, completed: bool = False, failure=None) -> None:
+    """Best-effort persistence after individual or batch runs.
+
+    Streamlit Community Cloud filesystem can still be lost after an app restart or
+    redeploy, so the page always exposes a browser download as the durable copy.
+    """
+    payload = _current_payload(completed=completed, failure=failure)
+    if payload is None:
+        return
+    st.session_state.latest_saved_run = payload
+    try:
+        persist_run(payload, PROJECT_ROOT / "runtime_data" / "qualification_runs")
+    except Exception:
+        # Browser download remains available below even if runtime persistence fails.
+        pass
+
+
 st.title("Extraction Qualification Benchmark")
 st.caption("Synthetic hematologic malignancy stress-test suite • No PHI • No treatment recommendations")
 st.warning("Research qualification environment only. Results from this suite do not constitute clinical validation.")
@@ -159,6 +190,7 @@ if st.button("Run selected qualification case", type="primary"):
             "warnings": package.warnings,
             "raw_extraction": package.raw_extraction,
         }
+        _persist_current_session(completed=False)
         st.success(f"{gold.case_id} completed. Core gate: {'PASS' if score.passed_core_gate else 'REVIEW / FAIL'}")
         if score.notes:
             for note in score.notes:
@@ -278,43 +310,45 @@ else:
         f"{summary['mean_unsupported_provenance_assertion_rate'] * 100:.1f}%",
     )
 
-    saved = st.session_state.latest_saved_run
-    if saved:
-        completed_label = "COMPLETE" if saved.get("completed") else "PARTIAL"
-        st.caption(
-            f"Latest saved run: {saved.get('run_timestamp_utc', 'unknown time')} UTC • "
-            f"{completed_label} • {saved.get('model_name', 'unknown model')} • "
-            f"reasoning={saved.get('reasoning_effort', 'unknown')}"
-        )
-        if saved.get("failure"):
-            failure = saved["failure"]
-            st.warning(
-                "Saved run stopped before completion: "
-                f"{failure.get('case_id', 'unknown case')} • {failure.get('error_type', 'error')} • "
-                f"{failure.get('message', '')}"
-            )
+    # Always build an export from the current in-memory results, including individual runs.
+    current_export = build_run_payload(
+        scores=scores,
+        diagnostics=st.session_state.benchmark_diagnostics,
+        model_name=model_name,
+        reasoning_effort=reasoning_effort,
+        completed=len(scores) == len(CASES),
+        failure=None,
+    )
+    st.session_state.latest_saved_run = current_export
 
-        json_bytes = json.dumps(saved, indent=2, ensure_ascii=False, default=str).encode("utf-8")
-        csv_bytes = payload_to_csv(saved).encode("utf-8")
-        b1, b2 = st.columns(2)
-        b1.download_button(
-            "Download benchmark results (JSON)",
-            data=json_bytes,
-            file_name="qualification_benchmark_latest.json",
-            mime="application/json",
-            use_container_width=True,
-        )
-        b2.download_button(
-            "Download benchmark results (CSV)",
-            data=csv_bytes,
-            file_name="qualification_benchmark_latest.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
+    completed_label = "COMPLETE" if current_export.get("completed") else "PARTIAL"
+    st.caption(
+        f"Current export: {current_export.get('run_timestamp_utc', 'unknown time')} UTC • "
+        f"{completed_label} • {current_export.get('model_name', 'unknown model')} • "
+        f"reasoning={current_export.get('reasoning_effort', 'unknown')}"
+    )
+
+    json_bytes = json.dumps(current_export, indent=2, ensure_ascii=False, default=str).encode("utf-8")
+    csv_bytes = payload_to_csv(current_export).encode("utf-8")
+    b1, b2 = st.columns(2)
+    b1.download_button(
+        "Download current results (JSON)",
+        data=json_bytes,
+        file_name="qualification_benchmark_current.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+    b2.download_button(
+        "Download current results (CSV)",
+        data=csv_bytes,
+        file_name="qualification_benchmark_current.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
 
     st.info(
-        "Runtime persistence survives normal page reruns and browser-session resets while the Streamlit app instance remains available. "
-        "Streamlit Community Cloud storage is ephemeral across some app restarts/redeployments, so download the JSON after important runs."
+        "Individual-case results are now saved best-effort after each run and are always exportable from this page. "
+        "Streamlit Community Cloud storage is ephemeral across some app restarts/redeployments, so download the JSON before rebooting or redeploying the app."
     )
 
     st.markdown("### Qualification policy")

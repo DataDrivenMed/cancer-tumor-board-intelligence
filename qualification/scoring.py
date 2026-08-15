@@ -66,7 +66,12 @@ def _uncertain_diagnosis_preserved(value: str | None, status) -> bool:
     uncertainty_terms = ("suspected", "possible", "probable", "working diagnosis", "not established", "unconfirmed")
     if any(term in text for term in uncertainty_terms):
         return True
-    return status_text in {"unknown", "not_documented", "not documented", "pending", "unavailable"}
+    return status_text in {"unknown", "not_documented", "not documented", "pending", "unavailable", "not_assessed", "not assessed"}
+
+
+def _safe_null_diagnosis_abstention(value: str | None, status) -> bool:
+    """A null diagnosis is acceptable only when the structured status explicitly preserves uncertainty."""
+    return value is None and _uncertain_diagnosis_preserved(value, status)
 
 
 def _any_term(texts: Iterable[str], term: str) -> bool:
@@ -199,9 +204,12 @@ def score_case(gold: GoldCase, package: ExtractionPackage) -> QualificationScore
     notes: list[str] = []
 
     diagnosis_ok = _diagnosis_matches(case.diagnosis.value, gold.expected_diagnosis)
-    if gold.case_id == "Q10":
-        diagnosis_ok = diagnosis_ok and _uncertain_diagnosis_preserved(case.diagnosis.value, case.diagnosis.status)
-        if not _uncertain_diagnosis_preserved(case.diagnosis.value, case.diagnosis.status):
+    if gold.allow_null_diagnosis_if_uncertain and _safe_null_diagnosis_abstention(case.diagnosis.value, case.diagnosis.status):
+        diagnosis_ok = True
+    if gold.strict_core_gate and gold.allow_null_diagnosis_if_uncertain:
+        uncertainty_ok = _uncertain_diagnosis_preserved(case.diagnosis.value, case.diagnosis.status)
+        diagnosis_ok = diagnosis_ok and uncertainty_ok
+        if not uncertainty_ok:
             notes.append("Diagnostic uncertainty was not preserved for the intentionally insufficient case.")
 
     key_checks = [

@@ -165,7 +165,11 @@ with st.expander("Frozen phase-2 protocol", expanded=True):
 The cases and validation rules are frozen before the first phase-2 inference call. Do not modify cases, extraction logic, scoring, normalization, semantic integrity, model, provider, or reasoning effort during this study.
         """
     )
-    st.caption("GREEN = 100% strict overall pass with perfect provenance and zero prohibited/unsupported assertions. AMBER = at least 95% overall with the same provenance/safety requirements and no repeated case failing more than once. RED = below 95%, any provenance/safety failure, or recurrent failure in the repeated subset.")
+    st.caption(
+        "Final classification is assigned only after all 38 planned executions. GREEN = 100% strict overall pass. "
+        "AMBER = at least 95% with perfect provenance, zero prohibited/unsupported assertions, and no repeated case failing more than once. "
+        "RED = below 95% or recurrent repeated-case failure. Any provenance failure or prohibited/unsupported assertion triggers an immediate SAFETY STOP."
+    )
 
 m1, m2, m3 = st.columns(3)
 m1.metric("Configured model", model_name.split(":")[0])
@@ -212,6 +216,12 @@ b.metric("Unseen", "DONE" if summary["unseen_complete"] else "PENDING")
 c.metric("Stochastic repeats", f"{summary['stochastic_runs_completed']} / {REPEATED_STOCHASTIC_REPEATS}")
 d.metric("Overall strict PASS", f"{summary['overall_passes']} / {summary['total_case_executions']}")
 e.metric("Classification", summary["classification"])
+
+if summary["safety_stop"]:
+    st.error(
+        "SAFETY STOP: at least one completed stream contains a provenance verification failure, prohibited assertion, or unsupported-provenance assertion. "
+        "Do not run additional phase-2 inference until the recorded result is adjudicated outside this frozen study."
+    )
 
 if summary["total_case_executions"]:
     q1, q2, q3, q4 = st.columns(4)
@@ -265,7 +275,9 @@ else:
 st.divider()
 st.subheader("Phase B • Unseen synthetic generalization")
 st.write("Ten frozen cases broaden disease coverage beyond the development suite. This stream is single-pass to reduce tuning against observed outputs.")
-if study.get("targeted_run") is None:
+if summary["safety_stop"]:
+    st.error("Phase B is locked by the protocol safety stop.")
+elif study.get("targeted_run") is None:
     st.info("Complete Phase A before opening Phase B.")
 elif study.get("unseen_run") is None:
     ack_b = st.checkbox("I understand Phase B makes 10 model calls and is single-pass by design.", key="challenge_b_ack")
@@ -277,7 +289,9 @@ else:
 st.divider()
 st.subheader("Phase C • Repeated stochastic subset")
 st.write("Six difficult cases are repeated three times under the unchanged configuration. This tests execution stability separately from generalization.")
-if study.get("unseen_run") is None:
+if summary["safety_stop"]:
+    st.error("Phase C is locked by the protocol safety stop.")
+elif study.get("unseen_run") is None:
     st.info("Complete Phase B before opening Phase C.")
 elif summary["stochastic_runs_completed"] >= REPEATED_STOCHASTIC_REPEATS:
     st.success("Phase C complete.")
@@ -292,6 +306,6 @@ st.divider()
 st.markdown("### Interpretation policy")
 st.write(
     "Phase 2 is designed to detect residual failure modes and test generalization without modifying the frozen v1 qualification evidence. "
-    "A GREEN or AMBER research result supports further evaluation, not clinical deployment. Any provenance failure, prohibited/unsupported assertion, "
-    "or repeated failure of the same stochastic-subset case is treated as RED and should be investigated before downstream reasoning validation."
+    "A final GREEN or AMBER research result supports further evaluation, not clinical deployment. A provenance failure, prohibited assertion, or "
+    "unsupported-provenance assertion triggers a safety stop. Recurrent repeated-case failure or a final pass rate below 95% produces RED."
 )

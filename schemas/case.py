@@ -23,6 +23,16 @@ class DataStatus(str, Enum):
     UNAVAILABLE = "unavailable"
 
 
+class TreatmentStatus(str, Enum):
+    PLANNED = "planned"
+    ORDERED = "ordered"
+    STARTED = "started"
+    COMPLETED = "completed"
+    STOPPED = "stopped"
+    CANCELLED = "cancelled"
+    UNKNOWN = "unknown"
+
+
 class Provenance(BaseModel):
     document_id: str
     document_type: str | None = None
@@ -63,6 +73,7 @@ class MolecularFinding(BaseModel):
 class TreatmentEpisode(BaseModel):
     episode_id: str
     regimen: str
+    treatment_status: TreatmentStatus = TreatmentStatus.UNKNOWN
     intent: str | None = None
     line_of_therapy: int | None = None
     start_date: date | None = None
@@ -105,7 +116,7 @@ class CancerTumorBoardCase(BaseModel):
     case_type: Literal["synthetic", "deidentified_research", "prospective_silent", "clinical"] = "synthetic"
     disease_program: str = "hematologic_malignancy"
     tumor_board_type: str = "hematologic_malignancy_board"
-    schema_version: str = "0.2.0"
+    schema_version: str = "0.3.0"
 
     care_site: str | None = None
     age: int | None = Field(default=None, ge=0, le=130)

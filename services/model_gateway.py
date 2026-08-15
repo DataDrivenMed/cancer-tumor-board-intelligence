@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from openai import OpenAI
@@ -10,36 +11,45 @@ class ModelGatewayError(RuntimeError):
     pass
 
 
+DEFAULT_HF_ROUTER = "https://router.huggingface.co/v1"
+
+
 def structured_json_response(
     *,
-    base_url: str,
-    auth_token: str | None,
     model: str,
     system_instructions: str,
     user_input: str,
     schema_name: str,
     json_schema: dict[str, Any],
+    api_key: str | None = None,
+    auth_token: str | None = None,
+    base_url: str | None = None,
     reasoning_effort: str = "high",
 ) -> dict[str, Any]:
-    """Call an OpenAI-compatible inference endpoint with JSON-schema output.
+    """Call an OpenAI-compatible endpoint with strict JSON-schema output.
 
-    This gateway is provider-neutral. It can point to Hugging Face Inference
-    Providers, Groq, Fireworks, Together, a self-hosted vLLM server, or another
-    OpenAI-compatible endpoint. The application therefore does not depend on
-    the OpenAI API or on any specific commercial model host.
+    The clinical application is model-provider neutral. By default the hosted
+    research prototype uses Hugging Face Inference Providers, which can route
+    the open-weight gpt-oss model to supported inference backends. A self-hosted
+    OpenAI-compatible endpoint can be selected with MODEL_BASE_URL.
 
-    For local/self-hosted endpoints that do not require authentication, a
-    harmless placeholder token is supplied only because the OpenAI Python
-    client expects a non-empty api_key value.
+    `api_key` remains as a compatibility alias for older callers. It is not
+    specific to the OpenAI API and may contain a Hugging Face/provider token.
     """
-    if not base_url:
-        raise ModelGatewayError("MODEL_BASE_URL is not configured.")
+    endpoint = base_url or os.getenv("MODEL_BASE_URL") or DEFAULT_HF_ROUTER
+    token = auth_token or api_key or os.getenv("MODEL_AUTH_TOKEN") or os.getenv("HF_TOKEN")
+
     if not model:
         raise ModelGatewayError("MODEL_NAME is not configured.")
+    if endpoint == DEFAULT_HF_ROUTER and not token:
+        raise ModelGatewayError(
+            "No inference token is configured. The default Hugging Face router requires a Hugging Face token. "
+            "This is not an OpenAI API key."
+        )
 
     client = OpenAI(
-        base_url=base_url.rstrip("/"),
-        api_key=auth_token or "local-no-auth",
+        base_url=endpoint.rstrip("/"),
+        api_key=token or "local-no-auth",
     )
 
     request: dict[str, Any] = {
@@ -57,7 +67,6 @@ def structured_json_response(
             },
         },
     }
-
     if reasoning_effort:
         request["reasoning_effort"] = reasoning_effort
 

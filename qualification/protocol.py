@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict
+from pathlib import Path
 
 from qualification.cases import CASES
 
@@ -16,13 +17,34 @@ NORMALIZATION_VERSION = "1.0.0"
 TARGET_REPEATABILITY_RUNS = 5
 EXPECTED_CASE_IDS = tuple(f"Q{i:02d}" for i in range(1, 11))
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_FROZEN_SOURCE_PATHS = (
+    "qualification/cases.py",
+    "agents/extraction.py",
+    "qualification/scoring.py",
+    "services/extraction_normalization.py",
+    "services/conflict_consistency.py",
+    "services/semantic_integrity.py",
+)
+
+
+def _sha256_file(relative_path: str) -> str:
+    path = _PROJECT_ROOT / relative_path
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def frozen_source_hashes() -> dict[str, str]:
+    """Hash implementation files that define the frozen v1 qualification behavior."""
+    return {relative_path: _sha256_file(relative_path) for relative_path in _FROZEN_SOURCE_PATHS}
+
 
 def suite_manifest() -> dict:
-    """Return the immutable logical manifest used to identify qualification v1.0.
+    """Return the logical and implementation manifest for Qualification Suite v1.0.
 
-    The fingerprint intentionally includes every gold-case field. Any modification
-    to a narrative, expectation, safety condition, or case ordering changes the
-    fingerprint and prevents accidental aggregation with prior repeatability runs.
+    The fingerprint covers every gold-case field plus the extraction prompt/schema,
+    scorer, normalization, conflict consistency, and semantic-integrity source files.
+    Any substantive change therefore produces a different fingerprint and cannot be
+    silently mixed into an in-progress repeatability study.
     """
     case_rows = [asdict(case) for case in CASES]
     return {
@@ -34,6 +56,7 @@ def suite_manifest() -> dict:
         "normalization_version": NORMALIZATION_VERSION,
         "case_ids": [case.case_id for case in CASES],
         "cases": case_rows,
+        "frozen_source_hashes": frozen_source_hashes(),
     }
 
 
@@ -52,6 +75,7 @@ def protocol_metadata() -> dict:
         "normalization_version": NORMALIZATION_VERSION,
         "target_repeatability_runs": TARGET_REPEATABILITY_RUNS,
         "suite_fingerprint": suite_fingerprint(),
+        "frozen_source_hashes": frozen_source_hashes(),
     }
 
 

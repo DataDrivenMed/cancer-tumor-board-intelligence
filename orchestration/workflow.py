@@ -6,13 +6,14 @@ from services.audit import audit_event
 from services.quality import inspect_case
 from services.semantic_integrity import inspect_semantic_integrity, semantic_integrity_passes
 from services.guideline_sources import PRODUCTION_GUIDELINE_STORE
+from services.molecular_sources import PRODUCTION_MOLECULAR_STORE
 from orchestration.router import route_case
 from agents.case_integrity import run_case_integrity
 from agents.missing_information import run_missing_information
 from agents.guideline import GuidelineAgent
 from agents.literature import LiteratureAgent
+from agents.molecular import MolecularInterpretationAgent
 from agents.mock_agents import (
-    MolecularMockAgent,
     TranslationalMockAgent,
     TrialMockAgent,
     SafetyMockAgent,
@@ -21,7 +22,7 @@ from agents.mock_agents import (
 
 AGENT_REGISTRY = {
     "guideline": GuidelineAgent(PRODUCTION_GUIDELINE_STORE),
-    "molecular": MolecularMockAgent(),
+    "molecular": MolecularInterpretationAgent(PRODUCTION_MOLECULAR_STORE, production_mode=True),
     "translational": TranslationalMockAgent(),
     # Production-safe default: live PubMed access is opt-in and requires an explicit
     # NCBI contact email. The Streamlit Literature page exercises the live adapter.
@@ -175,9 +176,8 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
 
     preliminary = (
         "Skeleton synthesis only. The application has routed the case through specialist contracts. "
-        "The Guideline Agent enforces verified-source evidence boundaries, and the Literature Agent "
-        "now enforces a PubMed retrieval boundary. Live literature retrieval remains explicit opt-in; "
-        "retrieved publications cannot become clinical claims until a separate verification layer is enabled."
+        "Guideline, literature, and molecular layers now enforce explicit evidence boundaries. "
+        "The production molecular store remains empty until independently verified disease- and alteration-specific evidence records are loaded."
     )
 
     red_team = [

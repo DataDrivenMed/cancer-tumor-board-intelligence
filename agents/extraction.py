@@ -31,6 +31,20 @@ STATUS_VALUES = [
 ]
 
 
+_PLACEHOLDER_VALUES = {
+    "",
+    "unknown",
+    "not documented",
+    "not_documented",
+    "pending",
+    "unavailable",
+    "not assessed",
+    "not_assessed",
+    "not applicable",
+    "not_applicable",
+}
+
+
 def _nullable_string() -> dict[str, Any]:
     return {"type": ["string", "null"]}
 
@@ -217,7 +231,7 @@ Rules:
 2. Never infer an undocumented diagnosis, stage, disease state, treatment response, ECOG score, molecular alteration, laboratory value, medication, or clinical question as fact.
 3. If a fact is absent, use status not_documented, unknown, pending, unavailable, not_assessed, or not_applicable as appropriate. Do not invent a value.
 4. Preserve contradictions. Do not choose between conflicting source statements.
-5. For every confirmed patient fact, return one or more exact source_segment_ids and a short verbatim source_excerpt copied from those segments.
+5. For every substantive non-null patient fact, regardless of whether its status is confirmed, conflicting, unknown, pending, or another uncertainty status, return one or more exact source_segment_ids and a short verbatim source_excerpt copied from those segments. Null/placeholder facts do not need provenance.
 6. The source_excerpt must be an exact substring of the cited source segment text. Do not paraphrase inside source_excerpt.
 7. Molecular findings must preserve the reported gene, alteration type, HGVS notation, VAF, specimen type, assay, and laboratory interpretation when present. Do not label an alteration clinically actionable.
 8. Treatment episodes must preserve chronology, line of therapy only when documented or unambiguous from explicit sequencing, response, reason stopped, and toxicities. If line is not clear, return null.
@@ -229,6 +243,7 @@ Rules:
 14. For an explicitly pending test, create a missing_items entry naming that test, set availability to 'pending', explain that the result is not yet available, and set recommendation_blocking according to whether the source indicates or the clinical question makes clear that the pending result could affect the decision. Never convert a pending test into a positive or negative result.
 15. Before finalizing the JSON, perform a completeness audit of the source for the words or concepts pending, unavailable, not documented, not assessed, awaiting, sent, ordered, and not yet resulted. Ensure every decision-relevant unresolved item is represented in missing_items without inventing information.
 16. Preserve explicit current disease-state qualifiers. If the source directly states that the current malignancy is newly diagnosed, relapsed, recurrent, refractory, progressive/progressing, in remission, or another explicit temporal disease state, populate disease_state with that supported wording and exact provenance. Do not drop a disease-state phrase merely because it appears adjacent to the diagnosis. Distinguish current-state qualifiers from remote historical conditions.
+17. source_segment_ids must contain only the exact authoritative segment ID token shown in the first bracket, for example S0001. Never append page, paragraph, locator, punctuation, or other metadata to the segment ID.
 """
 
 
@@ -250,6 +265,13 @@ class ExtractionPackage:
 
 def _normalize(text: str | None) -> str:
     return " ".join((text or "").split()).strip()
+
+
+def _is_substantive_value(value: str | None) -> bool:
+    if value is None:
+        return False
+    normalized = _normalize(value).lower().replace("_", " ")
+    return normalized not in {item.replace("_", " ") for item in _PLACEHOLDER_VALUES}
 
 
 def _verified_provenance(
@@ -282,10 +304,7 @@ def _verified_provenance(
 
 
 def _fact_requires_verified_provenance(fact: Fact) -> bool:
-    return (
-        fact.value is not None
-        and fact.status in {DataStatus.CONFIRMED, DataStatus.CONFLICTING}
-    )
+    return _is_substantive_value(fact.value)
 
 
 def _to_fact(item: dict[str, Any], document: ParsedDocument, failures: list[str]) -> Fact:
@@ -302,7 +321,7 @@ def _to_fact(item: dict[str, Any], document: ParsedDocument, failures: list[str]
         provenance.append(prov)
 
     confidence = float(item.get("confidence", 0.0))
-    if status in {DataStatus.CONFIRMED, DataStatus.CONFLICTING} and item.get("value") is not None and not verified:
+    if _is_substantive_value(item.get("value")) and not verified:
         confidence = min(confidence, 0.50)
         failures.append(item.get("field", "unknown_field"))
 
@@ -340,6 +359,7 @@ def extract_case(
 
     user_input = (
         "Extract the tumor-board case from the source below. Segment identifiers are authoritative provenance anchors. "
+        "For source_segment_ids copy only the exact segment token in the first bracket, such as S0001; never include page/paragraph locator metadata. "
         "Preserve any explicit current disease-state wording such as newly diagnosed, relapsed, recurrent, refractory, progressive, or remission in disease_state with exact provenance. "
         "Before returning JSON, audit all explicitly pending, unavailable, not documented, not assessed, awaiting, ordered, sent, or not-yet-resulted decision-relevant items and include each in missing_items with the correct availability.\n\n"
         + document.numbered_text()
@@ -476,7 +496,7 @@ def extract_case(
 
     if failures:
         warnings.append(
-            "One or more extracted assertions failed exact provenance verification and were automatically confidence-capped at 0.50 where applicable."
+            "One or more extracted substantive assertions failed exact provenance verification and were automatically confidence-capped at 0.50 where applicable."
         )
 
     return ExtractionPackage(

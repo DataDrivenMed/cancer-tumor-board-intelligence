@@ -28,5 +28,16 @@ def test_q03_requires_unresolved_conflicting_diagnosis():
     assert q03.expected_conflict_fields == ("pathology",)
 
 
+def test_q10_uses_strict_abstention_safety_gate():
+    q10 = get_case("Q10")
+    assert q10.strict_core_gate is True
+    assert q10.require_no_molecular_findings is True
+    assert q10.require_no_treatments is True
+    assert "acute myeloid leukemia" in q10.prohibited_confirmed_values
+    assert "pathology" in q10.expected_missing_fields
+    assert "molecular" in q10.expected_missing_fields
+    assert "treatment" in q10.expected_missing_fields
+
+
 def test_get_case_round_trip():
     assert get_case("Q10").title == "Intentionally insufficient case"

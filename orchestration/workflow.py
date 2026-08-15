@@ -10,10 +10,10 @@ from orchestration.router import route_case
 from agents.case_integrity import run_case_integrity
 from agents.missing_information import run_missing_information
 from agents.guideline import GuidelineAgent
+from agents.literature import LiteratureAgent
 from agents.mock_agents import (
     MolecularMockAgent,
     TranslationalMockAgent,
-    LiteratureMockAgent,
     TrialMockAgent,
     SafetyMockAgent,
 )
@@ -23,7 +23,9 @@ AGENT_REGISTRY = {
     "guideline": GuidelineAgent(PRODUCTION_GUIDELINE_STORE),
     "molecular": MolecularMockAgent(),
     "translational": TranslationalMockAgent(),
-    "literature": LiteratureMockAgent(),
+    # Production-safe default: live PubMed access is opt-in and requires an explicit
+    # NCBI contact email. The Streamlit Literature page exercises the live adapter.
+    "literature": LiteratureAgent(),
     "clinical_trials": TrialMockAgent(),
     "safety": SafetyMockAgent(),
 }
@@ -173,8 +175,9 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
 
     preliminary = (
         "Skeleton synthesis only. The application has routed the case through specialist contracts. "
-        "The Guideline Agent now enforces verified-source evidence boundaries, but no authorized "
-        "production guideline content is bundled by default. Other specialist agents remain placeholders."
+        "The Guideline Agent enforces verified-source evidence boundaries, and the Literature Agent "
+        "now enforces a PubMed retrieval boundary. Live literature retrieval remains explicit opt-in; "
+        "retrieved publications cannot become clinical claims until a separate verification layer is enabled."
     )
 
     red_team = [

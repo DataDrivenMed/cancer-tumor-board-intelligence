@@ -3,11 +3,11 @@ from __future__ import annotations
 import csv
 import io
 import json
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from qualification.protocol import protocol_metadata
 from qualification.scoring import QualificationScore
 
 
@@ -48,12 +48,13 @@ def build_run_payload(
     failure: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "run_timestamp_utc": _utc_now_iso(),
         "model_name": model_name,
         "reasoning_effort": reasoning_effort,
         "completed": completed,
         "failure": failure,
+        "protocol": protocol_metadata(),
         "scores": [_score_row(score) for score in sorted(scores, key=lambda item: item.case_id)],
         "diagnostics": diagnostics,
     }

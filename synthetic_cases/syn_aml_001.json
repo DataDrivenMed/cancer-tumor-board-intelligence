@@ -1,0 +1,107 @@
+{
+  "case_id": "SYN-AML-001",
+  "case_type": "synthetic",
+  "disease_program": "hematologic_malignancy",
+  "tumor_board_type": "hematologic_malignancy_board",
+  "schema_version": "0.1.0",
+  "care_site": "Synthetic development environment",
+  "age": 68,
+  "sex": "female",
+  "diagnosis": {
+    "field": "diagnosis",
+    "value": "Acute myeloid leukemia",
+    "status": "confirmed",
+    "information_type": "observed",
+    "provenance": [
+      {
+        "document_id": "SYN-DOC-001",
+        "document_type": "synthetic_tumor_board_summary",
+        "source_section": "Diagnosis",
+        "source_excerpt": "Acute myeloid leukemia",
+        "care_site": "Synthetic development environment"
+      }
+    ],
+    "confidence": 1.0,
+    "human_verified": true
+  },
+  "disease_state": {
+    "field": "disease_state",
+    "value": "Relapsed",
+    "status": "confirmed",
+    "information_type": "observed",
+    "provenance": [
+      {
+        "document_id": "SYN-DOC-001",
+        "document_type": "synthetic_tumor_board_summary",
+        "source_section": "Disease status",
+        "source_excerpt": "Relapsed disease"
+      }
+    ],
+    "confidence": 1.0,
+    "human_verified": true
+  },
+  "performance_status": {
+    "field": "performance_status.ecog",
+    "value": 1,
+    "status": "confirmed",
+    "information_type": "observed",
+    "provenance": [
+      {
+        "document_id": "SYN-DOC-001",
+        "document_type": "synthetic_tumor_board_summary",
+        "source_section": "Functional status",
+        "source_excerpt": "ECOG 1"
+      }
+    ],
+    "confidence": 1.0,
+    "human_verified": true
+  },
+  "molecular_findings": [
+    {
+      "gene": "FLT3",
+      "alteration_type": "ITD",
+      "variant_allele_frequency": 0.31,
+      "specimen_type": "bone marrow",
+      "assay": "synthetic NGS panel",
+      "laboratory_interpretation": "pathogenic",
+      "provenance": [
+        {
+          "document_id": "SYN-DOC-002",
+          "document_type": "synthetic_molecular_report",
+          "source_section": "Somatic variants",
+          "source_excerpt": "FLT3-ITD detected; VAF 31%"
+        }
+      ]
+    }
+  ],
+  "treatments": [
+    {
+      "episode_id": "TX-001",
+      "regimen": "Synthetic induction regimen A",
+      "intent": "induction",
+      "line_of_therapy": 1,
+      "agents": ["Agent A", "Agent B"],
+      "reason_stopped": "completed",
+      "best_response": "complete remission"
+    },
+    {
+      "episode_id": "TX-002",
+      "regimen": "Synthetic salvage regimen B",
+      "intent": "salvage",
+      "line_of_therapy": 2,
+      "agents": ["Agent C"],
+      "reason_stopped": "progression",
+      "best_response": "partial response"
+    }
+  ],
+  "labs": [],
+  "comorbidities": [],
+  "clinical_question": {
+    "question_type": "relapsed_refractory_treatment",
+    "question": "What treatment strategies should be considered for tumor-board discussion?",
+    "urgency": "routine_tumor_board"
+  },
+  "conflicts": [],
+  "missing_items": [],
+  "source_documents": ["SYN-DOC-001", "SYN-DOC-002"]
+}

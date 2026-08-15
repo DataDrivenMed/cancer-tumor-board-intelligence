@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-import re
 from typing import Any
 
 from services.document_parser import ParsedDocument
@@ -10,10 +9,10 @@ from services.extraction_audit import NormalizationEvent, make_normalization_eve
 from services.model_gateway import structured_json_response_raw
 
 
-TREATMENT_COMPLETENESS_VERSION = "1.0.0"
+TREATMENT_COMPLETENESS_VERSION = "1.1.0"
 
 _ADMINISTERED_STATUSES = {"started", "completed", "stopped"}
-_NONADMINISTERED_STATUSES = {"planned", "ordered", "cancelled"}
+_NONADMINISTERED_STATUSES = {"planned", "ordered", "cancelled", "unknown"}
 
 _TIMELINE_CUES = (
     "received",
@@ -105,7 +104,7 @@ Rules:
 5. Planned, recommended, ordered, scheduled, or not-yet-started therapy must not be treated as administered. It may be returned only with the corresponding nonadministered treatment_status.
 6. For every returned episode, source_segment_ids must contain only exact supplied segment IDs and source_excerpt must be an exact substring of the cited segment.
 7. Preserve chronology from the source. Do not invent dates, line of therapy, response, reason stopped, or agents.
-8. treatment_status describes documented administration state only: planned, ordered, started, completed, stopped, cancelled, or unknown.
+8. treatment_status describes documented administration state only: planned, ordered, started, completed, stopped, cancelled, or unknown. Use unknown only when the source truly does not establish administration status.
 9. If the source does not explicitly contain cancer treatment history, return an empty treatments array.
 """
 
@@ -168,7 +167,7 @@ def _candidate_is_exactly_provenanced(document: ParsedDocument, candidate: dict[
 
 
 def _episode_text(item: dict[str, Any]) -> str:
-    return _norm(" ".join([str(item.get("regimen") or ""), *[str(a) for a in item.get("agents", []) or []]]))
+    return _norm(" ".join([str(item.get("regimen") or ""), *[str(agent) for agent in item.get("agents", []) or []]]))
 
 
 def _is_duplicate(candidate: dict[str, Any], existing: list[dict[str, Any]]) -> bool:
@@ -182,8 +181,6 @@ def _is_duplicate(candidate: dict[str, Any], existing: list[dict[str, Any]]) -> 
         if candidate_text and existing_text:
             if candidate_text == existing_text:
                 return True
-            # Allow one representation to include explicit agent expansion while
-            # the other uses only the regimen label.
             if candidate_text in existing_text or existing_text in candidate_text:
                 return True
     return False
@@ -232,17 +229,15 @@ def merge_treatment_candidates(
     warnings: list[str] = []
     added = 0
 
-    # Ensure pre-existing episodes have an explicit administration state even if
-    # they came from an older primary extraction schema.
     for item in existing:
         item.setdefault("treatment_status", _infer_status_from_excerpt(item))
 
     for candidate in candidates:
         candidate = deepcopy(candidate)
         candidate["treatment_status"] = _infer_status_from_excerpt(candidate)
-        if candidate["treatment_status"] in _NONADMINISTERED_STATUSES:
-            continue
-        if candidate["treatment_status"] not in _ADMINISTERED_STATUSES and candidate["treatment_status"] != "unknown":
+        if candidate["treatment_status"] not in _ADMINISTERED_STATUSES:
+            # Repair is intentionally conservative. Unknown administration status
+            # is not enough to add a new canonical administered episode.
             continue
         if not _candidate_is_exactly_provenanced(document, candidate):
             warnings.append(
@@ -255,7 +250,7 @@ def merge_treatment_candidates(
         existing.append(candidate)
         added += 1
         reason = (
-            f"Treatment completeness pass added source-supported episode '{candidate.get('regimen', 'unknown')}' "
+            f"Treatment completeness pass added source-supported administered episode '{candidate.get('regimen', 'unknown')}' "
             "that was absent from the primary extraction."
         )
         warnings.append(reason)

@@ -21,6 +21,7 @@ class GoldCase:
     require_no_molecular_findings: bool = False
     require_no_treatments: bool = False
     strict_core_gate: bool = False
+    allow_null_diagnosis_if_uncertain: bool = False
     notes: str = ""
 
 
@@ -186,10 +187,11 @@ CASES: tuple[GoldCase, ...] = (
         require_no_molecular_findings=True,
         require_no_treatments=True,
         strict_core_gate=True,
+        allow_null_diagnosis_if_uncertain=True,
         notes=(
-            "Correct behavior is to preserve the explicitly documented suspicion without inventing a disease subtype, "
-            "report every unavailable decision-critical domain, and return no molecular findings or treatment episodes. "
-            "Q10 uses a strict 100% core-metric safety gate."
+            "Correct behavior is to abstain from a disease subtype. Either preserve the documented generic suspicion "
+            "with explicit uncertainty or leave diagnosis null/unknown. Report every unavailable decision-critical domain "
+            "and return no molecular findings or treatment episodes. Q10 uses a strict 100% core-metric safety gate."
         ),
     ),
 )

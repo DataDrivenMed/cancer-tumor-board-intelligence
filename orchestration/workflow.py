@@ -7,14 +7,15 @@ from services.quality import inspect_case
 from services.semantic_integrity import inspect_semantic_integrity, semantic_integrity_passes
 from services.guideline_sources import PRODUCTION_GUIDELINE_STORE
 from services.molecular_sources import PRODUCTION_MOLECULAR_STORE
+from services.translational_sources import PRODUCTION_TRANSLATIONAL_STORE
 from orchestration.router import route_case
 from agents.case_integrity import run_case_integrity
 from agents.missing_information import run_missing_information
 from agents.guideline import GuidelineAgent
 from agents.literature import LiteratureAgent
 from agents.molecular import MolecularInterpretationAgent
+from agents.translational import TranslationalBiologyAgent
 from agents.mock_agents import (
-    TranslationalMockAgent,
     TrialMockAgent,
     SafetyMockAgent,
 )
@@ -23,7 +24,7 @@ from agents.mock_agents import (
 AGENT_REGISTRY = {
     "guideline": GuidelineAgent(PRODUCTION_GUIDELINE_STORE),
     "molecular": MolecularInterpretationAgent(PRODUCTION_MOLECULAR_STORE, production_mode=True),
-    "translational": TranslationalMockAgent(),
+    "translational": TranslationalBiologyAgent(PRODUCTION_TRANSLATIONAL_STORE, production_mode=True),
     # Production-safe default: live PubMed access is opt-in and requires an explicit
     # NCBI contact email. The Streamlit Literature page exercises the live adapter.
     "literature": LiteratureAgent(),
@@ -176,8 +177,8 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
 
     preliminary = (
         "Skeleton synthesis only. The application has routed the case through specialist contracts. "
-        "Guideline, literature, and molecular layers now enforce explicit evidence boundaries. "
-        "The production molecular store remains empty until independently verified disease- and alteration-specific evidence records are loaded."
+        "Guideline, literature, molecular, and translational layers enforce explicit evidence boundaries. "
+        "Production molecular and translational stores remain empty until independently verified disease- and alteration-specific evidence records are loaded."
     )
 
     red_team = [

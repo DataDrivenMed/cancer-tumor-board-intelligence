@@ -11,10 +11,11 @@ from schemas.guideline import (
     GuidanceSourceType,
     GuidelineReport,
 )
+from services.oncology_programs import is_registered_oncology_program
 
 
 AGENT_ID = "guideline"
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 
 
 @dataclass(frozen=True)
@@ -112,7 +113,7 @@ def _label(source_type: GuidanceSourceType) -> str:
 
 
 class GuidelineAgent:
-    """Evidence-bounded guidance matcher with molecular prerequisites."""
+    """Evidence-bounded pan-oncology guidance matcher with molecular prerequisites."""
 
     agent_id = AGENT_ID
     agent_version = AGENT_VERSION
@@ -129,12 +130,12 @@ class GuidelineAgent:
         self.today = today or date.today()
 
     def run(self, case: CancerTumorBoardCase) -> GuidelineReport:
-        if case.disease_program != "hematologic_malignancy":
+        if not is_registered_oncology_program(case.disease_program):
             return GuidelineReport(
                 case_id=case.case_id,
                 status="abstain_domain",
-                summary="Guideline Agent v1 is restricted to hematologic malignancy cases.",
-                limitations=["Case is outside the v1 hematologic-malignancy domain."],
+                summary="Guideline Agent received a case outside the registered oncology programs.",
+                limitations=["The disease program must be classified into the governed pan-oncology registry before analysis."],
             )
 
         sources = list(self.store.sources)
@@ -158,7 +159,7 @@ class GuidelineAgent:
                 sources_considered=0,
                 recommendations_considered=0,
                 summary="No guidance evidence source is configured; no guideline claim can be generated.",
-                limitations=["A verified, authorized guidance source must be connected before guideline analysis can run."],
+                limitations=["A verified, authorized disease-specific guidance source must be connected before guideline analysis can run."],
                 can_support_guideline_claim=False,
             )
 
@@ -258,7 +259,7 @@ class GuidelineAgent:
                 formal_guideline_matches=0,
                 warnings=warnings,
                 limitations=limitations,
-                summary="No current verified guidance recommendation matched the represented diagnosis, disease state, question domain, and required molecular prerequisites.",
+                summary="No current verified disease-specific guidance recommendation matched the represented diagnosis, disease state, question domain, and required molecular prerequisites.",
                 can_support_guideline_claim=False,
             )
 

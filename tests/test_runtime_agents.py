@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from agents.clinical_trials import ClinicalTrialsAgent
 from agents.literature import LiteratureAgent
-from services.runtime_agents import build_runtime_registry
+from orchestration import workflow
+from services import runtime_agents
+from services.runtime_agents import build_runtime_registry, configure_workflow_runtime
 
 
 def test_runtime_registry_enables_clinicaltrials_by_default(monkeypatch):
@@ -43,3 +45,24 @@ def test_clinicaltrials_can_be_disabled(monkeypatch):
     registry, status = build_runtime_registry()
     assert registry["clinical_trials"].client is None
     assert status["clinical_trials"]["ready"] is False
+
+
+def test_configure_runtime_fails_closed_instead_of_crashing(monkeypatch):
+    def broken_registry(**kwargs):
+        raise TypeError("simulated runtime constructor mismatch")
+
+    monkeypatch.setattr(runtime_agents, "build_runtime_registry", broken_registry)
+    status = configure_workflow_runtime()
+
+    assert status["runtime"]["ready"] is False
+    assert status["runtime"]["fail_closed"] is True
+    assert status["runtime"]["error_type"] == "TypeError"
+    assert "simulated runtime constructor mismatch" in status["runtime"]["error"]
+    assert set(workflow.AGENT_REGISTRY) == {
+        "guideline",
+        "molecular",
+        "translational",
+        "literature",
+        "clinical_trials",
+        "safety",
+    }

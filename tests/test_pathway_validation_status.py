@@ -6,9 +6,11 @@ from services.pathway_validation import COMMON_CORE_QUALIFICATION, get_pathway_v
 
 def test_common_core_qualification_record_is_machine_readable():
     assert COMMON_CORE_QUALIFICATION["result"] == "pass"
+    assert COMMON_CORE_QUALIFICATION["qualified_build"] == "b62217a3bc65321193195d782a593e093139d406"
+    assert COMMON_CORE_QUALIFICATION["workflow_run_id"] == 31964312857
     assert COMMON_CORE_QUALIFICATION["matrix_executions"] == 210
-    assert COMMON_CORE_QUALIFICATION["dedicated_pan_oncology_tests_passed"] == 255
-    assert COMMON_CORE_QUALIFICATION["full_regression_tests_passed"] == 546
+    assert COMMON_CORE_QUALIFICATION["dedicated_pan_oncology_tests_passed"] == 261
+    assert COMMON_CORE_QUALIFICATION["full_regression_tests_passed"] == 555
 
 
 def test_no_program_is_silently_promoted_to_clinical_validation():

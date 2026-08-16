@@ -6,11 +6,44 @@ from schemas.translational import (
     TranslationalEvidenceStore,
     TranslationalEvidenceTier,
 )
+from services.production_evidence_config import EvidenceConfigStatus, load_channel_payload
 
 
-# Production store is intentionally empty. Verified translational evidence must be
-# ingested through a governed, source-traceable process rather than model memory.
-PRODUCTION_TRANSLATIONAL_STORE = TranslationalEvidenceStore()
+def _load_production_translational_store() -> tuple[TranslationalEvidenceStore, EvidenceConfigStatus]:
+    payload, status = load_channel_payload("translational")
+    if payload is None:
+        return TranslationalEvidenceStore(), status
+
+    try:
+        if isinstance(payload, dict):
+            records_payload = payload.get("records", [])
+        elif isinstance(payload, list):
+            records_payload = payload
+        else:
+            raise ValueError("Translational evidence configuration must be a JSON object or list.")
+        store = TranslationalEvidenceStore(
+            records=[TranslationalEvidenceRecord.model_validate(x) for x in records_payload]
+        )
+        return store, EvidenceConfigStatus(
+            channel="translational",
+            configured=True,
+            loaded=True,
+            record_count=len(store.records),
+            configuration_origin=status.configuration_origin,
+        )
+    except Exception as exc:
+        return TranslationalEvidenceStore(), EvidenceConfigStatus(
+            channel="translational",
+            configured=True,
+            loaded=False,
+            error=f"{type(exc).__name__}: {exc}",
+            configuration_origin=status.configuration_origin,
+        )
+
+
+# Production is fail-closed until a governed source package is configured through
+# TRANSLATIONAL_EVIDENCE_JSON or TRANSLATIONAL_EVIDENCE_PATH.
+PRODUCTION_TRANSLATIONAL_STORE, PRODUCTION_TRANSLATIONAL_STATUS = _load_production_translational_store()
 
 
 SYNTHETIC_TRANSLATIONAL_STORE = TranslationalEvidenceStore(

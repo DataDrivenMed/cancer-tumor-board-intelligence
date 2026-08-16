@@ -124,13 +124,17 @@ class FDALabelClient:
             f'openfda.brand_name:"{therapy}" OR '
             f'openfda.substance_name:"{therapy}"'
         )
-        params: dict[str, str | int] = {"search": search, "limit": limit}
+
+        public_params: dict[str, str | int] = {"search": search, "limit": limit}
+        source_url = f"{OPENFDA_LABEL_URL}?{urlencode(public_params)}"
+
+        request_params = dict(public_params)
         if self.api_key:
-            params["api_key"] = self.api_key
-        url = f"{OPENFDA_LABEL_URL}?{urlencode(params)}"
+            request_params["api_key"] = self.api_key
+        request_url = f"{OPENFDA_LABEL_URL}?{urlencode(request_params)}"
 
         try:
-            payload = json.loads(self.transport(url, self.timeout).decode("utf-8"))
+            payload = json.loads(self.transport(request_url, self.timeout).decode("utf-8"))
         except Exception as exc:
             raise FDALabelClientError(f"openFDA label request failed: {exc}") from exc
 
@@ -153,12 +157,6 @@ class FDALabelClient:
             spl_id = _first(record.get("id")) or _first(openfda.get("spl_id"))
             application = _first(openfda.get("application_number"))
             effective_time = _first(record.get("effective_time"))
-
-            source_url = (
-                f"https://labels.fda.gov/package-insert/{spl_set_id}"
-                if spl_set_id
-                else OPENFDA_LABEL_URL
-            )
 
             for section in _SECTION_FIELDS:
                 raw = record.get(section)

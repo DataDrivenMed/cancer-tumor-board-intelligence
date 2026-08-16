@@ -83,11 +83,7 @@ TRANSLATIONAL_EVIDENCE_PATH=/secure/path/translational.json
 
 The `*_JSON` value takes precedence over the corresponding `*_PATH` value. Invalid packages fail closed and are not admitted into the production evidence store.
 
-### Guideline contract and NCCN
-
-For the initial AML deployment, institution-authorized NCCN guidance is the preferred governed formal-guideline source when the institution's access and reuse terms permit this use.
-
-**Never commit NCCN PDFs, extracted text, recommendation tables, credentials, or other licensed content to this public repository.** A current institution-authorized NCCN AML source should be processed outside the public repository into a secure deployment-time package.
+### Guideline contract
 
 A guideline package contains:
 
@@ -99,6 +95,14 @@ A guideline package contains:
 ```
 
 Each source and recommendation must validate against `schemas/guideline.py`. Recommendation `source_id` values must resolve to a configured source. Management candidates remain gated by the existing Consensus Engine, which requires verified formal or consensus guideline support.
+
+### AML guideline source policy
+
+For machine processing in the public/research product, the preferred AML consensus source is the open-access **European LeukemiaNet (ELN) 2022 recommendations for diagnosis and management of AML in adults**. ELN content still requires source attribution, versioning, bounded excerpts, and local verification before it is admitted to the governed guideline store.
+
+Institutional access to a licensed source is not automatically interpreted as permission for AI processing. In particular, if a supplied guideline document states that the content may not be used with artificial-intelligence models or tools, `services/licensed_guideline_adapter.py` rejects the source before transformation or admission. See `docs/NCCN_AI_USE_RESTRICTION.md`.
+
+**Never commit licensed guideline PDFs, extracted text, recommendation tables, credentials, or other restricted content to this public repository.** If the institution later obtains separate written authorization expressly permitting AI/model/tool use, commission that source through a separately reviewed integration path.
 
 NCI PDQ is intentionally classified as an `authoritative_evidence_summary`, not a formal or consensus guideline. The existing NCI AML PDQ adapter preserves this distinction and requires explicit human verification before admission.
 
@@ -150,7 +154,7 @@ CIVIC_API_KEY = "" # optional for anonymous/low-volume reads
 OPENFDA_API_KEY = "..." # recommended
 ```
 
-Large governed evidence packages and licensed NCCN-derived packages are better mounted or loaded through a secure deployment mechanism rather than copied into a public repository.
+Large governed evidence packages are better mounted or loaded through a secure deployment mechanism rather than copied into a public repository.
 
 ## 5. Safety boundaries
 

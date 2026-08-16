@@ -20,6 +20,7 @@ from agents.clinical_trials import ClinicalTrialsAgent
 from agents.safety import SafetyAgent
 from agents.clinical_red_team import run_clinical_red_team
 from agents.consensus import run_consensus
+from agents.tumor_board_brief import render_tumor_board_brief
 
 
 AGENT_REGISTRY = {
@@ -52,6 +53,7 @@ def _abstain_result(
         "red_team_findings": red_team_findings,
         "red_team_report": None,
         "consensus_report": None,
+        "tumor_board_brief": None,
         "semantic_integrity_findings": semantic_findings,
         "case_integrity_report": integrity_report,
         "missing_information_report": missing_report,
@@ -217,6 +219,15 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
         )
     )
 
+    tumor_board_brief = render_tumor_board_brief(case, specialist_outputs, red_team_report, consensus_report)
+    audit.append(
+        audit_event(
+            "tumor_board_brief_complete",
+            f"status={tumor_board_brief.status}; sections={len(tumor_board_brief.sections)}; "
+            f"source_traces={tumor_board_brief.source_trace_count}; decision_state={tumor_board_brief.decision_state}",
+        )
+    )
+
     primary_strategy = None
     alternatives = []
     if consensus_report.safe_to_render_decision_support and consensus_report.candidates:
@@ -239,10 +250,10 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
     )
 
     preliminary = (
-        "Deterministic evidence integration complete. The Consensus Engine does not use agent voting. Explicit management "
-        "candidates require verified formal or consensus guideline support; molecular, translational, literature, trial, "
-        "and safety outputs remain bounded by their own claim gates. Clinical Red Team challenges remain visible and any "
-        "recommendation-blocking finding forces abstention."
+        "Deterministic evidence integration and tumor-board brief rendering complete. The Consensus Engine does not use "
+        "agent voting. Explicit management candidates require verified formal or consensus guideline support; molecular, "
+        "translational, literature, trial, and safety outputs remain bounded by their own claim gates. The final brief is "
+        "a presentation transformer and cannot create new clinical claims."
     )
     audit.append(audit_event("workflow_complete", final.decision_state))
 
@@ -254,6 +265,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
         "red_team_findings": red_team,
         "red_team_report": red_team_report,
         "consensus_report": consensus_report,
+        "tumor_board_brief": tumor_board_brief,
         "semantic_integrity_findings": semantic_findings,
         "case_integrity_report": integrity_report,
         "missing_information_report": missing_report,

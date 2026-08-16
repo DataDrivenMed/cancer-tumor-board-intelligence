@@ -9,12 +9,13 @@ from agents.extraction_v21 import _to_fact_v21, _treatment_status
 from agents.extraction_v24 import ExtractionPackageV24, extract_case_v24
 from schemas.case import Provenance, TreatmentEpisode
 from services.document_parser import ParsedDocument
+from services.explicit_stage_extraction import extract_explicit_stage
 from services.extraction_audit import serialize_events
 from services.extraction_hardening_v25 import harden_extraction_v25
 from services.oncology_programs import assign_case_program
 
 
-EXTRACTION_V25_VERSION = "2.5.1"
+EXTRACTION_V25_VERSION = "2.5.2"
 
 
 @dataclass
@@ -44,7 +45,7 @@ class ExtractionPackageV25:
 
 def _recompute_provenance(case) -> tuple[int, int]:
     provenance_objects: list[Provenance] = []
-    facts = [case.diagnosis, case.disease_state]
+    facts = [case.diagnosis, case.disease_state, case.stage]
     if case.performance_status is not None:
         facts.append(case.performance_status)
     facts.extend(case.pathology)
@@ -99,13 +100,13 @@ def extract_case_v25(
     model: str = "openai/gpt-oss-120b:fireworks-ai",
     case_id: str = "EXTRACTED-001",
 ) -> ExtractionPackageV25:
-    """Provenance-preserving extraction with deterministic pan-oncology board assignment.
+    """Provenance-preserving pan-oncology extraction and board assignment.
 
-    The v2.4 uncertainty/provenance architecture is preserved. v2.5 adds only
-    deterministic treatment deduplication and missing-information ontology repair.
-    Product integration 2.5.1 additionally classifies the already represented,
-    source-backed diagnosis into a governed tumor-board program. It does not infer
-    diagnosis, stage, treatment, or actionability.
+    The v2.4 uncertainty/provenance architecture is preserved. v2.5 adds deterministic
+    treatment deduplication and missing-information ontology repair. Product integration
+    assigns the already represented diagnosis to a governed tumor-board program and
+    admits a stage fact only when an explicit stage phrase can be copied exactly from
+    source text. Stage is never derived from TNM, imaging, pathology, or model memory.
     """
     base: ExtractionPackageV24 = extract_case_v24(
         document=document,
@@ -121,9 +122,20 @@ def extract_case_v25(
     failures = [item for item in failures if not item.startswith("treatment:")]
     case.treatments = _rebuild_treatments(normalized, document, failures)
 
+    explicit_stage = extract_explicit_stage(document)
+    case.stage = explicit_stage.fact
+
     total, verified = _recompute_provenance(case)
     events = list(base.normalization_events) + serialize_events(hardened.events)
-    warnings = sorted(set(list(base.warnings) + list(hardened.warnings)))
+    warnings = sorted(set([
+        *base.warnings,
+        *hardened.warnings,
+        *explicit_stage.warnings,
+    ]))
+
+    stage_sidecar = deepcopy(base.stage)
+    if case.stage is not None:
+        stage_sidecar = case.stage.model_dump(mode="json")
 
     return ExtractionPackageV25(
         case=case,
@@ -136,7 +148,7 @@ def extract_case_v25(
         provenance_failures=sorted(set(failures)),
         warnings=warnings,
         diagnostic_certainty=base.diagnostic_certainty,
-        stage=deepcopy(base.stage),
+        stage=stage_sidecar,
         treatment_completeness_performed=base.treatment_completeness_performed,
         treatment_candidates_found=base.treatment_candidates_found,
         treatment_episodes_added=base.treatment_episodes_added,

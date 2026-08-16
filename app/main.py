@@ -2,5 +2,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-st.set_page_config(page_title="Tumor Board Intelligence", page_icon="🧬", layout="wide")
-st.switch_page("pages/00_Clinical_Workspace.py")
+from app.faculty_ui import render_overview
+
+st.set_page_config(
+    page_title="Pan-Oncology Tumor Board Intelligence",
+    page_icon="TB",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+render_overview()

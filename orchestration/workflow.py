@@ -8,6 +8,7 @@ from services.semantic_integrity import inspect_semantic_integrity, semantic_int
 from services.guideline_sources import PRODUCTION_GUIDELINE_STORE
 from services.molecular_sources import PRODUCTION_MOLECULAR_STORE
 from services.translational_sources import PRODUCTION_TRANSLATIONAL_STORE
+from services.safety_sources import PRODUCTION_SAFETY_STORE
 from orchestration.router import route_case
 from agents.case_integrity import run_case_integrity
 from agents.missing_information import run_missing_information
@@ -16,7 +17,7 @@ from agents.literature import LiteratureAgent
 from agents.molecular import MolecularInterpretationAgent
 from agents.translational import TranslationalBiologyAgent
 from agents.clinical_trials import ClinicalTrialsAgent
-from agents.mock_agents import SafetyMockAgent
+from agents.safety import SafetyAgent
 
 
 AGENT_REGISTRY = {
@@ -27,7 +28,7 @@ AGENT_REGISTRY = {
     # validation pages exercise the live PubMed and ClinicalTrials.gov adapters.
     "literature": LiteratureAgent(),
     "clinical_trials": ClinicalTrialsAgent(),
-    "safety": SafetyMockAgent(),
+    "safety": SafetyAgent(PRODUCTION_SAFETY_STORE, production_mode=True),
 }
 
 
@@ -175,8 +176,9 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
 
     preliminary = (
         "Skeleton synthesis only. The application has routed the case through specialist contracts. "
-        "Guideline, literature, molecular, translational, and clinical-trials layers enforce explicit evidence boundaries. "
-        "Live public-source retrieval remains explicit opt-in, and trial matching never establishes patient eligibility."
+        "Guideline, literature, molecular, translational, clinical-trials, and safety layers enforce explicit evidence boundaries. "
+        "Live public-source retrieval remains explicit opt-in, trial matching never establishes patient eligibility, "
+        "and the Safety Agent will not infer contraindications or monitoring requirements without verified safety evidence."
     )
 
     red_team = [

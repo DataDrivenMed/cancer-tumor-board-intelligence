@@ -9,23 +9,12 @@ from schemas.guideline import (
     GuidanceSourceType,
     GuidanceStrength,
 )
-from services.eln_aml_guidance import public_eln_aml_store
-from services.production_evidence_config import EvidenceConfigStatus, bool_env, load_channel_payload
+from services.production_evidence_config import EvidenceConfigStatus, load_channel_payload
 
 
 def _load_production_guideline_store() -> tuple[GuidelineEvidenceStore, EvidenceConfigStatus]:
     payload, status = load_channel_payload("guideline")
     if payload is None:
-        if bool_env("ENABLE_PUBLIC_ELN_GUIDANCE", default=True):
-            store = public_eln_aml_store()
-            return store, EvidenceConfigStatus(
-                channel="guideline",
-                configured=True,
-                loaded=True,
-                source_count=len(store.sources),
-                record_count=len(store.recommendations),
-                configuration_origin="builtin_public_eln_2022",
-            )
         return GuidelineEvidenceStore(), status
 
     try:
@@ -58,18 +47,15 @@ def _load_production_guideline_store() -> tuple[GuidelineEvidenceStore, Evidence
         )
 
 
-# Production defaults to one bounded open-access ELN AML consensus record. An
-# explicitly configured deployment package takes precedence. Setting
-# ENABLE_PUBLIC_ELN_GUIDANCE=false restores a fully empty fail-closed default.
+# Core production configuration remains fail-closed when no deployment evidence
+# package is configured. The clinician product may explicitly install a bounded
+# public evidence store for a specific supported workflow at runtime; this does not
+# change the default backend contract or historical regression semantics.
 PRODUCTION_GUIDELINE_STORE, PRODUCTION_GUIDELINE_STATUS = _load_production_guideline_store()
 
 
 def synthetic_guideline_store() -> GuidelineEvidenceStore:
-    """Synthetic evidence only for deterministic software testing and UI demonstrations.
-
-    These statements are intentionally fictional and must never be interpreted as
-    clinical guidance. GuidelineAgent requires allow_synthetic=True to use them.
-    """
+    """Synthetic evidence only for deterministic software testing and UI demonstrations."""
     source = GuidanceSource(
         source_id="SYN-GUIDE-001",
         title="Synthetic Hematologic Malignancy Guidance Fixture",

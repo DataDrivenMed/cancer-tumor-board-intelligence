@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from schemas.agent import FinalDecision, RedTeamFinding
 from schemas.case import CancerTumorBoardCase
+from schemas.tumor_board_brief import BriefItem, BriefSection, TumorBoardIntelligenceBrief
 from services.audit import audit_event
 from services.quality import inspect_case
 from services.semantic_integrity import inspect_semantic_integrity, semantic_integrity_passes
@@ -35,6 +36,129 @@ AGENT_REGISTRY = {
 }
 
 
+def _fact_refs(fact) -> list[str]:
+    refs: list[str] = []
+    if fact is None:
+        return refs
+    for prov in fact.provenance or []:
+        if prov.document_id:
+            refs.append(str(prov.document_id))
+        refs.extend(str(x) for x in (prov.source_segment_ids or []) if x)
+    return list(dict.fromkeys(refs))
+
+
+def _render_prerouting_abstention_brief(*, case, final, red_team_findings, integrity_report=None, missing_report=None):
+    decision_items = []
+    if integrity_report is not None:
+        for finding in integrity_report.findings:
+            if finding.recommendation_blocking:
+                decision_items.append(
+                    BriefItem(
+                        label=finding.code,
+                        value=finding.message,
+                        epistemic_label="INTERPRETED",
+                        limitations=["Recommendation blocking"],
+                    )
+                )
+    if missing_report is not None:
+        for item in missing_report.items:
+            decision_items.append(
+                BriefItem(
+                    label=item.field,
+                    value=item.reason,
+                    epistemic_label="UNKNOWN",
+                    limitations=["Recommendation blocking"] if item.recommendation_blocking else [],
+                )
+            )
+    if not decision_items:
+        for finding in red_team_findings:
+            decision_items.append(
+                BriefItem(
+                    label=finding.category,
+                    value=finding.issue,
+                    epistemic_label="INTERPRETED",
+                    limitations=[finding.effect_on_recommendation],
+                )
+            )
+
+    sections = [
+        BriefSection(
+            section_id="patient_snapshot",
+            title="Patient Snapshot",
+            items=[
+                BriefItem(label="Case ID", value=case.case_id, epistemic_label="OBSERVED"),
+                BriefItem(label="Age", value=str(case.age) if case.age is not None else "Not represented", epistemic_label="OBSERVED"),
+                BriefItem(label="Sex", value=case.sex or "Not represented", epistemic_label="OBSERVED"),
+                BriefItem(label="Diagnosis", value=str(case.diagnosis.value or "Not represented"), epistemic_label="OBSERVED", source_refs=_fact_refs(case.diagnosis)),
+                BriefItem(label="Disease state", value=str(case.disease_state.value or "Not represented"), epistemic_label="OBSERVED", source_refs=_fact_refs(case.disease_state)),
+                BriefItem(label="Performance status", value=str(case.performance_status.value) if case.performance_status and case.performance_status.value is not None else "Not represented", epistemic_label="OBSERVED", source_refs=_fact_refs(case.performance_status)),
+            ],
+        ),
+        BriefSection(
+            section_id="clinical_question",
+            title="Current Clinical Question",
+            items=[BriefItem(label=case.clinical_question.question_type, value=case.clinical_question.question, epistemic_label="OBSERVED")],
+        ),
+        BriefSection(
+            section_id="decision_critical_information",
+            title="Decision-Critical Information",
+            items=decision_items,
+            section_note="The workflow stopped before specialist synthesis because one or more pre-routing safety gates were not satisfied.",
+        ),
+        BriefSection(
+            section_id="management_strategy",
+            title="Management Strategy and Alternatives",
+            items=[
+                BriefItem(
+                    label="Management strategy",
+                    value="WITHHELD",
+                    epistemic_label="UNKNOWN",
+                    limitations=[final.abstention_reason or "Pre-routing safety gate prevented management synthesis."],
+                )
+            ],
+        ),
+        BriefSection(
+            section_id="red_team",
+            title="Safety / Pre-routing Challenge",
+            items=[
+                BriefItem(
+                    label=finding.category,
+                    value=finding.issue,
+                    epistemic_label="INTERPRETED",
+                    limitations=[finding.effect_on_recommendation],
+                )
+                for finding in red_team_findings
+            ],
+        ),
+        BriefSection(
+            section_id="uncertainty",
+            title="Uncertainty",
+            items=[BriefItem(label="Major uncertainty", value=x, epistemic_label="UNKNOWN") for x in final.major_uncertainties],
+        ),
+        BriefSection(
+            section_id="what_changes_recommendation",
+            title="What Could Change the Recommendation",
+            items=[BriefItem(label="Required next step", value=x, epistemic_label="INTERPRETED") for x in final.discussion_priorities],
+        ),
+    ]
+    source_refs = []
+    for section in sections:
+        for item in section.items:
+            source_refs.extend(item.source_refs)
+    return TumorBoardIntelligenceBrief(
+        case_id=case.case_id,
+        status="abstain",
+        decision_state="abstain",
+        decision_support_strength="insufficient",
+        sections=sections,
+        critical_warnings=[final.abstention_reason] if final.abstention_reason else [],
+        source_trace_count=len(set(source_refs)),
+        safe_to_display=True,
+        decision_support_only=True,
+        summary="Workflow stopped at a pre-routing safety gate. A structured abstention brief is shown so the clinician can see why management synthesis was withheld and what must be resolved next.",
+    )
+
+
 def _abstain_result(
     *,
     case,
@@ -45,6 +169,14 @@ def _abstain_result(
     integrity_report=None,
     missing_report=None,
 ):
+    brief = _render_prerouting_abstention_brief(
+        case=case,
+        final=final,
+        red_team_findings=red_team_findings,
+        integrity_report=integrity_report,
+        missing_report=missing_report,
+    )
+    audit.append(audit_event("tumor_board_brief_complete", "pre-routing abstention brief rendered"))
     return {
         "case": case,
         "routing": None,
@@ -53,7 +185,7 @@ def _abstain_result(
         "red_team_findings": red_team_findings,
         "red_team_report": None,
         "consensus_report": None,
-        "tumor_board_brief": None,
+        "tumor_board_brief": brief,
         "semantic_integrity_findings": semantic_findings,
         "case_integrity_report": integrity_report,
         "missing_information_report": missing_report,

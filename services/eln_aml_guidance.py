@@ -48,6 +48,7 @@ def public_eln_aml_store() -> GuidelineEvidenceStore:
         disease_states=["relapsed", "refractory", "relapsed refractory"],
         question_domains=["treatment_management", "molecular_management"],
         required_molecular_terms=["FLT3"],
+        therapy_terms=["gilteritinib"],
         recommendation_text=(
             "For relapsed or refractory AML with a verified FLT3 mutation, discuss gilteritinib as a consensus-supported salvage option, "
             "with treatment selection remaining conditional on prior therapy, current disease biology, transplant strategy, patient fitness, safety review, and clinician adjudication."

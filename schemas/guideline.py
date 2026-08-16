@@ -46,11 +46,10 @@ class GuidanceRecommendation(BaseModel):
     disease_terms: list[str] = Field(default_factory=list)
     disease_states: list[str] = Field(default_factory=list)
     question_domains: list[str] = Field(default_factory=list)
-    # Optional prerequisites that must be represented in verified case molecular
-    # findings before the recommendation is allowed to match. This prevents a
-    # disease-level recommendation for a targeted therapy from matching on gene
-    # name or diagnosis alone.
     required_molecular_terms: list[str] = Field(default_factory=list)
+    # Explicit therapy concepts are structured separately from prose so downstream
+    # safety review never has to guess a drug name from free text.
+    therapy_terms: list[str] = Field(default_factory=list)
     recommendation_text: str
     source_excerpt: str
     source_locator: str | None = None
@@ -83,6 +82,7 @@ class GuidanceMatch(BaseModel):
     evidence_level: str | None = None
     match_dimensions: list[str] = Field(default_factory=list)
     required_molecular_terms: list[str] = Field(default_factory=list)
+    therapy_terms: list[str] = Field(default_factory=list)
     conditions: list[str] = Field(default_factory=list)
     exclusions: list[str] = Field(default_factory=list)
     epistemic_label: Literal[
@@ -98,7 +98,7 @@ class GuidanceMatch(BaseModel):
 
 class GuidelineReport(BaseModel):
     agent_id: str = "guideline"
-    agent_version: str = "1.0.0"
+    agent_version: str = "1.1.0"
     case_id: str
     status: Literal[
         "completed",

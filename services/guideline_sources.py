@@ -9,12 +9,23 @@ from schemas.guideline import (
     GuidanceSourceType,
     GuidanceStrength,
 )
-from services.production_evidence_config import EvidenceConfigStatus, load_channel_payload
+from services.eln_aml_guidance import public_eln_aml_store
+from services.production_evidence_config import EvidenceConfigStatus, bool_env, load_channel_payload
 
 
 def _load_production_guideline_store() -> tuple[GuidelineEvidenceStore, EvidenceConfigStatus]:
     payload, status = load_channel_payload("guideline")
     if payload is None:
+        if bool_env("ENABLE_PUBLIC_ELN_GUIDANCE", default=True):
+            store = public_eln_aml_store()
+            return store, EvidenceConfigStatus(
+                channel="guideline",
+                configured=True,
+                loaded=True,
+                source_count=len(store.sources),
+                record_count=len(store.recommendations),
+                configuration_origin="builtin_public_eln_2022",
+            )
         return GuidelineEvidenceStore(), status
 
     try:
@@ -47,9 +58,9 @@ def _load_production_guideline_store() -> tuple[GuidelineEvidenceStore, Evidence
         )
 
 
-# Production remains fail-closed when no authorized source is configured. A licensed
-# or public evidence package can be supplied at deployment through
-# GUIDELINE_EVIDENCE_JSON or GUIDELINE_EVIDENCE_PATH without editing source code.
+# Production defaults to one bounded open-access ELN AML consensus record. An
+# explicitly configured deployment package takes precedence. Setting
+# ENABLE_PUBLIC_ELN_GUIDANCE=false restores a fully empty fail-closed default.
 PRODUCTION_GUIDELINE_STORE, PRODUCTION_GUIDELINE_STATUS = _load_production_guideline_store()
 
 

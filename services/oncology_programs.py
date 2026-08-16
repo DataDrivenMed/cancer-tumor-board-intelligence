@@ -138,13 +138,25 @@ def is_registered_oncology_program(program_id: str | None) -> bool:
     return str(program_id or "") in PROGRAM_BY_ID
 
 
-def classify_diagnosis(diagnosis: object | None) -> OncologyProgram:
+def classify_diagnosis(diagnosis: object | None, *, age: int | None = None) -> OncologyProgram:
     text = _norm(diagnosis)
     if not text:
         return PROGRAM_BY_ID["rare_unknown_primary_oncology"]
 
+    # Pediatric routing is an explicit operational tie-breaker for diagnoses that
+    # legitimately appear in both organ-specific and pediatric programs. This does
+    # not change or reinterpret the represented diagnosis.
+    if age is not None and age < 18:
+        pediatric = PROGRAM_BY_ID["pediatric_oncology"]
+        pediatric_matches = [
+            term for term in pediatric.diagnosis_terms
+            if _norm(term) and _norm(term) in text
+        ]
+        if pediatric_matches:
+            return pediatric
+
     # Prefer the longest matching disease phrase so specific diagnoses win over broad
-    # substrings such as "sarcoma" or "lymphoma".
+    # substrings such as "sarcoma" or "lymphoma". Registry order resolves exact ties.
     matches: list[tuple[int, OncologyProgram]] = []
     for program in PROGRAMS:
         for term in program.diagnosis_terms:
@@ -159,7 +171,10 @@ def classify_diagnosis(diagnosis: object | None) -> OncologyProgram:
 
 def assign_case_program(case):
     """Return a copy of a canonical case with deterministic pan-oncology metadata."""
-    classified = classify_diagnosis(getattr(getattr(case, "diagnosis", None), "value", None))
+    classified = classify_diagnosis(
+        getattr(getattr(case, "diagnosis", None), "value", None),
+        age=getattr(case, "age", None),
+    )
     updated = case.model_copy(deep=True)
     updated.disease_program = classified.program_id
     updated.tumor_board_type = classified.board_type

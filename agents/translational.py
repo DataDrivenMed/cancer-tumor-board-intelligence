@@ -18,9 +18,10 @@ def _norm(text: str | None) -> str:
     return " ".join((text or "").lower().replace("_", " ").split())
 
 
-def _finding_terms(finding: MolecularFinding) -> set[str]:
+def _alteration_terms(finding: MolecularFinding) -> set[str]:
+    # Gene identity is intentionally excluded. A gene-only match must never satisfy
+    # an alteration-specific translational evidence record.
     terms = {
-        _norm(finding.gene),
         _norm(finding.alteration_type),
         _norm(finding.hgvs_c),
         _norm(finding.hgvs_p),
@@ -45,9 +46,11 @@ def _record_matches(case: CancerTumorBoardCase, finding: MolecularFinding, recor
             return False
 
     if record.alteration_terms:
-        represented_terms = _finding_terms(finding)
+        represented_terms = _alteration_terms(finding)
+        if not represented_terms:
+            return False
         if not any(
-            any(_norm(term) in represented or represented in _norm(term) for represented in represented_terms)
+            any(_norm(term) == represented or _norm(term) in represented or represented in _norm(term) for represented in represented_terms)
             for term in record.alteration_terms
             if _norm(term)
         ):

@@ -18,7 +18,8 @@
         "document_type": "synthetic_tumor_board_summary",
         "source_section": "Diagnosis",
         "source_excerpt": "Acute myeloid leukemia",
-        "care_site": "Synthetic development environment"
+        "care_site": "Synthetic development environment",
+        "source_verified": true
       }
     ],
     "confidence": 1.0,
@@ -34,7 +35,8 @@
         "document_id": "SYN-DOC-001",
         "document_type": "synthetic_tumor_board_summary",
         "source_section": "Disease status",
-        "source_excerpt": "Relapsed disease"
+        "source_excerpt": "Relapsed disease",
+        "source_verified": true
       }
     ],
     "confidence": 1.0,
@@ -50,7 +52,8 @@
         "document_id": "SYN-DOC-001",
         "document_type": "synthetic_tumor_board_summary",
         "source_section": "Functional status",
-        "source_excerpt": "ECOG 1"
+        "source_excerpt": "ECOG 1",
+        "source_verified": true
       }
     ],
     "confidence": 1.0,
@@ -69,9 +72,11 @@
           "document_id": "SYN-DOC-002",
           "document_type": "synthetic_molecular_report",
           "source_section": "Somatic variants",
-          "source_excerpt": "FLT3-ITD detected; VAF 31%"
+          "source_excerpt": "FLT3-ITD detected; VAF 31%",
+          "source_verified": true
         }
-      ]
+      ],
+      "human_verified": true
     }
   ],
   "treatments": [
@@ -82,7 +87,17 @@
       "line_of_therapy": 1,
       "agents": ["Agent A", "Agent B"],
       "reason_stopped": "completed",
-      "best_response": "complete remission"
+      "best_response": "complete remission",
+      "provenance": [
+        {
+          "document_id": "SYN-DOC-003",
+          "document_type": "synthetic_treatment_history",
+          "source_section": "Prior treatment",
+          "source_excerpt": "Synthetic induction regimen A completed; best response complete remission.",
+          "source_verified": true
+        }
+      ],
+      "human_verified": true
     },
     {
       "episode_id": "TX-002",
@@ -91,7 +106,17 @@
       "line_of_therapy": 2,
       "agents": ["Agent C"],
       "reason_stopped": "progression",
-      "best_response": "partial response"
+      "best_response": "partial response",
+      "provenance": [
+        {
+          "document_id": "SYN-DOC-003",
+          "document_type": "synthetic_treatment_history",
+          "source_section": "Prior treatment",
+          "source_excerpt": "Synthetic salvage regimen B stopped for progression; best response partial response.",
+          "source_verified": true
+        }
+      ],
+      "human_verified": true
     }
   ],
   "labs": [],
@@ -103,5 +128,5 @@
   },
   "conflicts": [],
   "missing_items": [],
-  "source_documents": ["SYN-DOC-001", "SYN-DOC-002"]
+  "source_documents": ["SYN-DOC-001", "SYN-DOC-002", "SYN-DOC-003"]
 }

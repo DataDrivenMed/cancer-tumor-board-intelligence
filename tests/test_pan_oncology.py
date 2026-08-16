@@ -13,13 +13,13 @@ from schemas.case import CancerTumorBoardCase, ClinicalQuestion, Fact
 from services.oncology_programs import PROGRAMS, assign_case_program, classify_diagnosis, is_registered_oncology_program
 
 
-def _case(program_id: str, board_type: str, diagnosis: str) -> CancerTumorBoardCase:
+def _case(program_id: str, board_type: str, diagnosis: str, *, age: int = 62) -> CancerTumorBoardCase:
     return CancerTumorBoardCase(
         case_id=f"PAN-{program_id}",
         case_type="synthetic",
         disease_program=program_id,
         tumor_board_type=board_type,
-        age=62,
+        age=age,
         sex="female",
         diagnosis=Fact(field="diagnosis", value=diagnosis),
         disease_state=Fact(field="disease_state", value="metastatic"),
@@ -94,6 +94,24 @@ def test_assign_case_program_sets_board_metadata(program):
     assert assigned.disease_program == program.program_id
     assert assigned.tumor_board_type == program.board_type
     assert assigned.diagnosis.value == case.diagnosis.value
+
+
+def test_pediatric_cross_program_diagnoses_use_age_as_operational_tie_breaker():
+    for diagnosis in ("retinoblastoma", "rhabdomyosarcoma", "medulloblastoma"):
+        pediatric = classify_diagnosis(diagnosis, age=9)
+        assert pediatric.program_id == "pediatric_oncology"
+
+    # The same labels retain their organ/specialty board routing in an adult case.
+    assert classify_diagnosis("retinoblastoma", age=40).program_id == "ophthalmic_oncology"
+    assert classify_diagnosis("rhabdomyosarcoma", age=40).program_id == "sarcoma_oncology"
+    assert classify_diagnosis("medulloblastoma", age=40).program_id == "neuro_oncology"
+
+
+def test_assign_case_program_uses_case_age_for_pediatric_tie_breaker():
+    case = _case("ophthalmic_oncology", "ophthalmic_tumor_board", "retinoblastoma", age=7)
+    assigned = assign_case_program(case)
+    assert assigned.disease_program == "pediatric_oncology"
+    assert assigned.tumor_board_type == "pediatric_oncology_tumor_board"
 
 
 def test_unregistered_program_abstains_in_all_specialist_agents():

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from schemas.case import CancerTumorBoardCase, ClinicalQuestion, Fact, TreatmentEpisode
 from schemas.molecular import (
     ClinicalActionability,
     MolecularEvidenceDirection,
@@ -11,12 +12,14 @@ from schemas.molecular import (
 from services.evidence_commissioning import (
     build_approved_molecular_store,
     build_approved_safety_store,
+    molecular_candidate_therapies,
+    represented_therapy_terms,
     safety_candidate_excerpt,
 )
 from services.fda_label_adapter import FDALabelSectionCandidate
 
 
-def _molecular(evidence_id: str) -> MolecularEvidenceRecord:
+def _molecular(evidence_id: str, therapy: str = "gilteritinib") -> MolecularEvidenceRecord:
     return MolecularEvidenceRecord(
         evidence_id=evidence_id,
         source_id=evidence_id,
@@ -29,7 +32,7 @@ def _molecular(evidence_id: str) -> MolecularEvidenceRecord:
         alteration_terms=["ITD"],
         direction=MolecularEvidenceDirection.SUPPORTS_SENSITIVITY,
         actionability=ClinicalActionability.EMERGING,
-        therapy="gilteritinib",
+        therapy=therapy,
         evidence_summary="Bounded software-test statement.",
         source_excerpt="Bounded software-test statement.",
         source_locator=evidence_id,
@@ -83,3 +86,35 @@ def test_unselected_fda_candidate_is_not_admitted():
     )
     store = build_approved_safety_store([candidate], set())
     assert store.records == []
+
+
+def test_represented_solid_tumor_agents_are_available_for_label_discovery():
+    case = CancerTumorBoardCase(
+        case_id="BREAST-SAFETY-DISCOVERY",
+        disease_program="breast_oncology",
+        tumor_board_type="breast_tumor_board",
+        diagnosis=Fact(field="diagnosis", value="HER2-positive breast cancer"),
+        disease_state=Fact(field="disease_state", value="metastatic"),
+        treatments=[
+            TreatmentEpisode(
+                episode_id="TX-001",
+                regimen="trastuzumab deruxtecan",
+                agents=["trastuzumab deruxtecan"],
+            )
+        ],
+        clinical_question=ClinicalQuestion(
+            question_type="treatment_management",
+            question="Review management and safety considerations.",
+        ),
+    )
+    assert represented_therapy_terms(case) == ("trastuzumab deruxtecan",)
+
+
+def test_molecular_candidate_therapy_terms_support_pan_oncology_safety_discovery_without_attesting_actionability():
+    records = [
+        _molecular("CIVIC-EID-A", therapy="osimertinib"),
+        _molecular("CIVIC-EID-B", therapy="Osimertinib"),
+        _molecular("CIVIC-EID-C", therapy="amivantamab"),
+    ]
+    assert molecular_candidate_therapies(records) == ("osimertinib", "amivantamab")
+    assert all(record.human_verified is False for record in records)

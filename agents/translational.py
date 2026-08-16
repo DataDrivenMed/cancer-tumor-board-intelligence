@@ -8,10 +8,11 @@ from schemas.translational import (
     TranslationalFinding,
     TranslationalReport,
 )
+from services.oncology_programs import is_registered_oncology_program
 
 
 AGENT_ID = "translational"
-AGENT_VERSION = "1.0.0"
+AGENT_VERSION = "1.1.0"
 
 
 def _norm(text: str | None) -> str:
@@ -19,43 +20,29 @@ def _norm(text: str | None) -> str:
 
 
 def _alteration_terms(finding: MolecularFinding) -> set[str]:
-    # Gene identity is intentionally excluded. A gene-only match must never satisfy
-    # an alteration-specific translational evidence record.
-    terms = {
-        _norm(finding.alteration_type),
-        _norm(finding.hgvs_c),
-        _norm(finding.hgvs_p),
-    }
+    terms = {_norm(finding.alteration_type), _norm(finding.hgvs_c), _norm(finding.hgvs_p)}
     return {term for term in terms if term}
 
 
 def _record_matches(case: CancerTumorBoardCase, finding: MolecularFinding, record: TranslationalEvidenceRecord) -> bool:
     if not record.source_verified or not record.human_verified:
         return False
-
     if record.gene and _norm(record.gene) != _norm(finding.gene):
         return False
-
     diagnosis = _norm(str(case.diagnosis.value or ""))
     if record.disease_terms:
-        matched_disease = any(
-            _norm(term) and (_norm(term) in diagnosis or diagnosis in _norm(term))
-            for term in record.disease_terms
-        )
+        matched_disease = any(_norm(term) and (_norm(term) in diagnosis or diagnosis in _norm(term)) for term in record.disease_terms)
         if not matched_disease:
             return False
-
     if record.alteration_terms:
         represented_terms = _alteration_terms(finding)
         if not represented_terms:
             return False
         if not any(
             any(_norm(term) == represented or _norm(term) in represented or represented in _norm(term) for represented in represented_terms)
-            for term in record.alteration_terms
-            if _norm(term)
+            for term in record.alteration_terms if _norm(term)
         ):
             return False
-
     return True
 
 
@@ -72,12 +59,7 @@ def _strongest_tier(records: list[TranslationalEvidenceRecord]) -> Translational
 
 
 class TranslationalBiologyAgent:
-    """Evidence-bounded translational specialist.
-
-    This agent summarizes verified mechanistic and preclinical/human-translational
-    evidence for represented molecular findings. It never upgrades mechanistic,
-    preclinical, or translational evidence into clinical actionability.
-    """
+    """Evidence-bounded pan-oncology translational specialist."""
 
     agent_id = AGENT_ID
     agent_version = AGENT_VERSION
@@ -87,12 +69,12 @@ class TranslationalBiologyAgent:
         self.production_mode = production_mode
 
     def run(self, case: CancerTumorBoardCase) -> TranslationalReport:
-        if case.disease_program != "hematologic_malignancy":
+        if not is_registered_oncology_program(case.disease_program):
             return TranslationalReport(
                 case_id=case.case_id,
                 status="abstain_domain",
-                summary="Translational Biology Agent v1 is restricted to hematologic malignancy cases.",
-                limitations=["Case is outside the v1 hematologic-malignancy domain."],
+                summary="Translational Biology Agent received a case outside the registered oncology programs.",
+                limitations=["The disease program must be classified into the governed pan-oncology registry before translational analysis."],
             )
 
         if not case.molecular_findings:
@@ -103,13 +85,7 @@ class TranslationalBiologyAgent:
                 limitations=["Absence of represented findings does not establish a negative molecular evaluation."],
             )
 
-        usable_records = [
-            record
-            for record in self.store.records
-            if record.source_verified
-            and record.human_verified
-            and not (self.production_mode and record.synthetic)
-        ]
+        usable_records = [record for record in self.store.records if record.source_verified and record.human_verified and not (self.production_mode and record.synthetic)]
         if not usable_records:
             return TranslationalReport(
                 case_id=case.case_id,
@@ -123,35 +99,23 @@ class TranslationalBiologyAgent:
 
         findings: list[TranslationalFinding] = []
         any_match = False
-        any_human_translational = False
-
         for molecular_finding in case.molecular_findings:
-            matched = [
-                record
-                for record in usable_records
-                if _record_matches(case, molecular_finding, record)
-            ]
+            matched = [record for record in usable_records if _record_matches(case, molecular_finding, record)]
             any_match = any_match or bool(matched)
             strongest = _strongest_tier(matched)
             human_support = strongest == TranslationalEvidenceTier.T1_HUMAN_TRANSLATIONAL
-            any_human_translational = any_human_translational or human_support
-
-            findings.append(
-                TranslationalFinding(
-                    subject=molecular_finding.hgvs_p or molecular_finding.hgvs_c or molecular_finding.alteration_type or molecular_finding.gene,
-                    matched_evidence_ids=[record.evidence_id for record in matched],
-                    evidence_tiers=[record.evidence_tier for record in matched],
-                    directions=[record.direction for record in matched],
-                    mechanisms=sorted({record.mechanism for record in matched}),
-                    interventions=sorted({record.intervention for record in matched if record.intervention}),
-                    strongest_tier=strongest,
-                    human_translational_support=human_support,
-                    clinical_actionability_claim=False,
-                    limitations=[] if matched else [
-                        "No verified disease- and alteration-matched translational record was found; no mechanism was inferred."
-                    ],
-                )
-            )
+            findings.append(TranslationalFinding(
+                subject=molecular_finding.hgvs_p or molecular_finding.hgvs_c or molecular_finding.alteration_type or molecular_finding.gene,
+                matched_evidence_ids=[record.evidence_id for record in matched],
+                evidence_tiers=[record.evidence_tier for record in matched],
+                directions=[record.direction for record in matched],
+                mechanisms=sorted({record.mechanism for record in matched}),
+                interventions=sorted({record.intervention for record in matched if record.intervention}),
+                strongest_tier=strongest,
+                human_translational_support=human_support,
+                clinical_actionability_claim=False,
+                limitations=[] if matched else ["No verified disease- and alteration-matched translational record was found; no mechanism was inferred."],
+            ))
 
         if not any_match:
             status = "no_evidence_found"

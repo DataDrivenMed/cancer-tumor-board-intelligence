@@ -18,6 +18,7 @@ from agents.molecular import MolecularInterpretationAgent
 from agents.translational import TranslationalBiologyAgent
 from agents.clinical_trials import ClinicalTrialsAgent
 from agents.safety import SafetyAgent
+from agents.clinical_red_team import run_clinical_red_team
 
 
 AGENT_REGISTRY = {
@@ -67,6 +68,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
                 for f in semantic_findings
                 if f.severity in {"error", "critical"}
             ],
+            "red_team_report": None,
             "semantic_integrity_findings": semantic_findings,
             "case_integrity_report": None,
             "missing_information_report": None,
@@ -112,6 +114,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
                 for f in integrity_report.findings
                 if f.recommendation_blocking
             ],
+            "red_team_report": None,
             "semantic_integrity_findings": semantic_findings,
             "case_integrity_report": integrity_report,
             "missing_information_report": None,
@@ -155,6 +158,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
                 for item in missing_report.items
                 if item.recommendation_blocking
             ],
+            "red_team_report": None,
             "semantic_integrity_findings": semantic_findings,
             "case_integrity_report": integrity_report,
             "missing_information_report": missing_report,
@@ -174,32 +178,58 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
             status = status.value
         audit.append(audit_event("agent_complete", f"{agent_id}; status={status}"))
 
-    preliminary = (
-        "Skeleton synthesis only. The application has routed the case through specialist contracts. "
-        "Guideline, literature, molecular, translational, clinical-trials, and safety layers enforce explicit evidence boundaries. "
-        "Live public-source retrieval remains explicit opt-in, trial matching never establishes patient eligibility, "
-        "and the Safety Agent will not infer contraindications or monitoring requirements without verified safety evidence."
+    red_team_report = run_clinical_red_team(case, routing, specialist_outputs)
+    audit.append(
+        audit_event(
+            "clinical_red_team_complete",
+            f"disposition={red_team_report.disposition.value}; findings={len(red_team_report.findings)}; "
+            f"blocking={red_team_report.blocking_count}; safe_for_consensus={red_team_report.safe_for_consensus}",
+        )
     )
-
     red_team = [
         RedTeamFinding(
-            severity="critical",
-            category="evidence_unavailable",
-            issue="The complete validated evidence stack is not yet connected for all specialist agents.",
-            effect_on_recommendation="Final clinical recommendation must be withheld.",
+            severity=finding.severity.value,
+            category=finding.category,
+            issue=finding.issue,
+            effect_on_recommendation=finding.effect_on_recommendation,
         )
+        for finding in red_team_report.findings
     ]
+
+    preliminary = (
+        "Skeleton synthesis only. The application has routed the case through specialist contracts and an independent "
+        "deterministic Clinical Red Team. Guideline, literature, molecular, translational, clinical-trials, and safety "
+        "layers enforce explicit evidence boundaries. Trial matching never establishes patient eligibility, translational "
+        "evidence never independently establishes clinical actionability, and recommendation-blocking Red Team findings "
+        "must be resolved before consensus."
+    )
+
+    if not red_team_report.safe_for_consensus:
+        abstention_reason = (
+            "Clinical Red Team identified recommendation-blocking evidence, safety, orchestration, or epistemic-integrity findings."
+        )
+        priorities = [
+            finding.effect_on_recommendation
+            for finding in red_team_report.findings
+            if finding.recommendation_blocking
+        ]
+    else:
+        abstention_reason = (
+            "The Clinical Red Team stage is complete, but the validated Consensus Engine has not yet been activated; "
+            "the current build therefore withholds a clinical recommendation."
+        )
+        priorities = [
+            "Preserve all Red Team challenges and specialist limitations in the future consensus state.",
+            "Do not convert agent agreement into truth or bounded no-result searches into negative evidence.",
+            "Activate recommendation logic only after the Consensus Engine is implemented and independently validated.",
+        ]
 
     final = FinalDecision(
         decision_state="abstain",
         decision_support_strength="insufficient",
-        abstention_reason="The current build does not yet have a complete validated evidence stack and therefore cannot support a clinical recommendation.",
+        abstention_reason=abstention_reason,
         major_uncertainties=[item.field for item in missing_report.items if item.priority.value in {"high", "critical"}],
-        discussion_priorities=[
-            "Verify the structured patient facts.",
-            "Resolve any decision-critical missing information.",
-            "Connect, authorize, and validate the evidence sources required by each selected specialist agent before activating recommendation logic.",
-        ],
+        discussion_priorities=priorities,
     )
     audit.append(audit_event("workflow_complete", final.decision_state))
 
@@ -209,6 +239,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
         "specialist_outputs": specialist_outputs,
         "preliminary_synthesis": preliminary,
         "red_team_findings": red_team,
+        "red_team_report": red_team_report,
         "semantic_integrity_findings": semantic_findings,
         "case_integrity_report": integrity_report,
         "missing_information_report": missing_report,

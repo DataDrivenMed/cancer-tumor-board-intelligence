@@ -26,6 +26,8 @@ from services.evidence_commissioning import (
     safety_candidate_excerpt,
 )
 from services.model_gateway import ModelGatewayError
+from services.oncology_programs import PROGRAM_BY_ID
+from services.pathway_validation import get_pathway_validation_status
 from services.runtime_agents import configure_workflow_runtime
 
 
@@ -163,7 +165,12 @@ def case_summary(case: CancerTumorBoardCase) -> None:
         mol_text = " ".join(x for x in [mol.gene, mol.alteration_type] if x)
         if mol.variant_allele_frequency is not None: mol_text += f" · VAF {mol.variant_allele_frequency*100:.0f}%"
         mol_verified = source_ok(mol)
-    st.markdown('<div class="facts">' + fact("Diagnosis", case.diagnosis.value, source_ok(case.diagnosis)) + fact("Disease state", case.disease_state.value, source_ok(case.disease_state)) + fact("Molecular", mol_text, mol_verified) + fact("Age", case.age) + fact("Sex", case.sex) + fact("ECOG", case.performance_status.value if case.performance_status else None, source_ok(case.performance_status) if case.performance_status else None) + '</div>', unsafe_allow_html=True)
+    program = PROGRAM_BY_ID.get(case.disease_program)
+    program_label = program.display_name if program else human(case.disease_program)
+    validation = get_pathway_validation_status(case.disease_program)
+    stage_value = case.stage.value if case.stage is not None else None
+    stage_verified = source_ok(case.stage) if case.stage is not None else None
+    st.markdown('<div class="facts">' + fact("Tumor board", program_label) + fact("Validation", validation.label) + fact("Diagnosis", case.diagnosis.value, source_ok(case.diagnosis)) + fact("Disease state", case.disease_state.value, source_ok(case.disease_state)) + fact("Stage", stage_value, stage_verified) + fact("Molecular", mol_text, mol_verified) + fact("Age", case.age) + fact("Sex", case.sex) + fact("ECOG", case.performance_status.value if case.performance_status else None, source_ok(case.performance_status) if case.performance_status else None) + '</div>', unsafe_allow_html=True)
     tx = case.treatments[-1] if case.treatments else None
     c1, c2 = st.columns(2, gap="small")
     with c1: st.markdown(f'<div class="ws-card soft"><div class="ws-title">Most recent represented treatment</div><div class="ws-copy">{escape(tx.regimen if tx else "Not documented")}</div></div>', unsafe_allow_html=True)
@@ -178,7 +185,7 @@ def load_synthetic() -> CancerTumorBoardCase:
 def confirm_case_representation(case: CancerTumorBoardCase) -> CancerTumorBoardCase:
     """Record clinician confirmation only for facts already carrying verified provenance."""
     confirmed = case.model_copy(deep=True)
-    facts = [confirmed.diagnosis, confirmed.disease_state, confirmed.performance_status]
+    facts = [confirmed.diagnosis, confirmed.disease_state, confirmed.stage, confirmed.performance_status]
     facts += list(confirmed.pathology) + list(confirmed.imaging) + list(confirmed.labs)
     facts += list(confirmed.comorbidities) + list(confirmed.toxicities)
     facts += list(confirmed.transplant_cellular_therapy) + list(confirmed.current_medications)

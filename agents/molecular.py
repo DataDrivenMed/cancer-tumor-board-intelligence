@@ -9,10 +9,11 @@ from schemas.molecular import (
     MolecularFindingInterpretation,
     MolecularReport,
 )
+from services.oncology_programs import is_registered_oncology_program
 
 
 AGENT_ID = "molecular"
-AGENT_VERSION = "1.0.0"
+AGENT_VERSION = "1.1.0"
 
 
 def _norm(text: str | None) -> str:
@@ -57,13 +58,7 @@ def _max_actionability(records: list[MolecularEvidenceRecord]) -> ClinicalAction
 
 
 class MolecularInterpretationAgent:
-    """Evidence-bounded molecular specialist.
-
-    The agent matches represented molecular findings to a pre-verified evidence store.
-    It does not infer pathogenicity, variant class, therapy sensitivity, resistance,
-    or actionability from the gene name alone. Mechanistic relevance and clinical
-    actionability remain separate outputs.
-    """
+    """Evidence-bounded pan-oncology molecular specialist."""
 
     agent_id = AGENT_ID
     agent_version = AGENT_VERSION
@@ -73,12 +68,12 @@ class MolecularInterpretationAgent:
         self.production_mode = production_mode
 
     def run(self, case: CancerTumorBoardCase) -> MolecularReport:
-        if case.disease_program != "hematologic_malignancy":
+        if not is_registered_oncology_program(case.disease_program):
             return MolecularReport(
                 case_id=case.case_id,
                 status="abstain_domain",
-                summary="Molecular Interpretation Agent v1 is restricted to hematologic malignancy cases.",
-                limitations=["Case is outside the v1 hematologic-malignancy domain."],
+                summary="Molecular Interpretation Agent received a case outside the registered oncology programs.",
+                limitations=["The disease program must be classified into the governed pan-oncology registry before analysis."],
             )
 
         if not case.molecular_findings:

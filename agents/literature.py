@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from schemas.case import CancerTumorBoardCase
-from schemas.literature import LiteratureReport, LiteratureSearchTrace
+from schemas.literature import LiteratureArticle, LiteratureReport, LiteratureSearchTrace
 from services.pubmed_client import PubMedClient, PubMedClientError
 
 
 AGENT_ID = "literature"
-AGENT_VERSION = "1.0.0"
+AGENT_VERSION = "1.1.0"
 
 
 def _clean_phrase(value: object | None) -> str:
@@ -25,6 +25,24 @@ def _question_family(case: CancerTumorBoardCase) -> str:
     if any(token in text for token in ("diagnos", "classification", "workup")):
         return "diagnosis"
     return "management"
+
+
+def _population_compatible(case: CancerTumorBoardCase, article: LiteratureArticle) -> bool:
+    """Exclude only obvious title-level pediatric/adult population mismatches.
+
+    This is deliberately conservative. It does not infer study applicability from an
+    abstract and does not turn retrieval into evidence appraisal.
+    """
+    if case.age is None:
+        return True
+    title = article.title.lower()
+    pediatric_markers = ("pediatric", "paediatric", "children", "childhood", "adolescent")
+    older_adult_markers = ("older adults", "elderly", "aged 65", "age 65")
+    if case.age >= 18 and any(x in title for x in pediatric_markers):
+        return False
+    if case.age < 18 and any(x in title for x in older_adult_markers):
+        return False
+    return True
 
 
 def build_pubmed_query(case: CancerTumorBoardCase) -> tuple[str, list[str]]:
@@ -77,9 +95,9 @@ def build_pubmed_query(case: CancerTumorBoardCase) -> tuple[str, list[str]]:
 class LiteratureAgent:
     """PubMed retrieval specialist with a strict claim boundary.
 
-    Version 1 retrieves and normalizes PubMed records. It does not interpret study
-    results, infer efficacy, compare treatments, or convert abstracts into clinical
-    recommendations. Retrieval is evidence discovery, not evidence verification.
+    Version 1.1 retrieves and normalizes PubMed records and excludes only obvious
+    title-level age-population mismatches. It does not interpret study results, infer
+    efficacy, compare treatments, or convert abstracts into clinical recommendations.
     """
 
     agent_id = AGENT_ID
@@ -145,17 +163,36 @@ class LiteratureAgent:
                 f"ESearch returned {len(search_result.pmids)} PMID(s), while EFetch yielded {len(articles)} parseable record(s)."
             )
 
+        surfaced = [article for article in articles if _population_compatible(case, article)]
+        excluded = len(articles) - len(surfaced)
+        if excluded:
+            warnings.append(
+                f"Excluded {excluded} retrieved publication(s) from surfaced results because the title indicated an obvious age-population mismatch."
+            )
+
+        if not surfaced:
+            return LiteratureReport(
+                case_id=case.case_id,
+                status="no_evidence_found",
+                search_trace=trace,
+                warnings=warnings,
+                summary="PubMed returned records, but none remained after conservative population-relevance screening.",
+                limitations=["Population screening is title-level only and does not establish absence of relevant evidence."],
+                can_support_literature_claim=False,
+            )
+
         return LiteratureReport(
             case_id=case.case_id,
             status="completed_with_limitations",
             search_trace=trace,
-            articles=articles,
+            articles=surfaced,
             warnings=warnings,
             limitations=[
                 "PubMed retrieval identifies candidate literature but does not verify a clinical claim.",
+                "Population screening excludes only obvious title-level age mismatches and is not study-applicability appraisal.",
                 "Abstract availability does not imply full-text availability or sufficient evidence for decision support.",
                 "Study design, population, endpoints, effect estimates, bias, applicability, and contradictions require a separate evidence-verification step.",
             ],
-            summary=f"Retrieved {len(articles)} PubMed record(s) using a bounded query derived from structured case concepts.",
+            summary=f"Surfaced {len(surfaced)} of {len(articles)} retrieved PubMed record(s) after bounded query and conservative population screening.",
             can_support_literature_claim=False,
         )

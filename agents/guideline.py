@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from schemas.case import CancerTumorBoardCase
+from schemas.case import CancerTumorBoardCase, DataStatus
 from schemas.guideline import (
     GuidanceMatch,
     GuidanceRecommendation,
@@ -15,7 +15,7 @@ from services.oncology_programs import is_registered_oncology_program
 
 
 AGENT_ID = "guideline"
-AGENT_VERSION = "1.2.0"
+AGENT_VERSION = "1.3.0"
 
 
 @dataclass(frozen=True)
@@ -45,6 +45,24 @@ def _text_match(case_value: object | None, allowed_terms: list[str]) -> bool:
         if term_tokens and term_tokens.issubset(case_tokens):
             return True
     return False
+
+
+def _verified_stage_text(case: CancerTumorBoardCase) -> str:
+    stage = case.stage
+    if stage is None or stage.status != DataStatus.CONFIRMED or not stage.human_verified:
+        return ""
+    if not any(bool(getattr(p, "source_verified", False)) for p in (stage.provenance or [])):
+        return ""
+    return _norm(stage.value)
+
+
+def _stage_requirements_match(case: CancerTumorBoardCase, stage_terms: list[str]) -> bool:
+    if not stage_terms:
+        return True
+    represented = _verified_stage_text(case)
+    if not represented:
+        return False
+    return _text_match(represented, stage_terms)
 
 
 def _verified_molecular_text(case: CancerTumorBoardCase) -> str:
@@ -113,7 +131,7 @@ def _label(source_type: GuidanceSourceType) -> str:
 
 
 class GuidelineAgent:
-    """Evidence-bounded pan-oncology guidance matcher with molecular prerequisites."""
+    """Evidence-bounded pan-oncology guidance matcher with stage and molecular prerequisites."""
 
     agent_id = AGENT_ID
     agent_version = AGENT_VERSION
@@ -181,6 +199,7 @@ class GuidelineAgent:
         question_domain = _question_domain(case)
         matches: list[GuidanceMatch] = []
         expired_or_outdated = 0
+        stage_prerequisite_misses = 0
         molecular_prerequisite_misses = 0
 
         for rec in verified_recommendations:
@@ -194,6 +213,9 @@ class GuidelineAgent:
                 continue
             if rec.question_domains and question_domain not in rec.question_domains:
                 continue
+            if not _stage_requirements_match(case, rec.stage_terms):
+                stage_prerequisite_misses += 1
+                continue
             if not _molecular_requirements_match(case, rec.required_molecular_terms):
                 molecular_prerequisite_misses += 1
                 continue
@@ -203,6 +225,8 @@ class GuidelineAgent:
                 dimensions.append("diagnosis")
             if rec.disease_states:
                 dimensions.append("disease_state")
+            if rec.stage_terms:
+                dimensions.append("verified_explicit_stage_prerequisite")
             if rec.question_domains:
                 dimensions.append("question_domain")
             if rec.required_molecular_terms:
@@ -221,6 +245,7 @@ class GuidelineAgent:
                 strength=rec.strength,
                 evidence_level=rec.evidence_level,
                 match_dimensions=dimensions,
+                stage_terms=rec.stage_terms,
                 required_molecular_terms=rec.required_molecular_terms,
                 therapy_terms=rec.therapy_terms,
                 conditions=rec.conditions,
@@ -239,6 +264,10 @@ class GuidelineAgent:
         limitations: list[str] = []
         if expired_or_outdated:
             warnings.append(f"{expired_or_outdated} verified recommendation(s) were excluded because the source/recommendation was not current on {self.today.isoformat()}.")
+        if stage_prerequisite_misses:
+            limitations.append(
+                f"{stage_prerequisite_misses} stage-dependent recommendation(s) were excluded because the required explicit stage was not represented with verified provenance and clinician confirmation."
+            )
         if molecular_prerequisite_misses:
             limitations.append(
                 f"{molecular_prerequisite_misses} targeted recommendation(s) were excluded because required molecular prerequisites were not represented with verified case provenance."
@@ -259,7 +288,7 @@ class GuidelineAgent:
                 formal_guideline_matches=0,
                 warnings=warnings,
                 limitations=limitations,
-                summary="No current verified disease-specific guidance recommendation matched the represented diagnosis, disease state, question domain, and required molecular prerequisites.",
+                summary="No current verified disease-specific guidance recommendation matched the represented diagnosis, disease state, explicit stage prerequisites, question domain, and required molecular prerequisites.",
                 can_support_guideline_claim=False,
             )
 

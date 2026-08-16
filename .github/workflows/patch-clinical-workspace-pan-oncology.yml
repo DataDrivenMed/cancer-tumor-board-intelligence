@@ -1,0 +1,55 @@
+name: Patch Pan-Oncology Clinical Workspace
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-clinical-workspace-pan-oncology.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Patch clinician workspace
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("app/pages/00_Clinical_Workspace.py")
+          text = path.read_text(encoding="utf-8")
+
+          old_import = """from services.model_gateway import ModelGatewayError\nfrom services.runtime_agents import configure_workflow_runtime\n"""
+          new_import = """from services.model_gateway import ModelGatewayError\nfrom services.oncology_programs import PROGRAM_BY_ID\nfrom services.pathway_validation import get_pathway_validation_status\nfrom services.runtime_agents import configure_workflow_runtime\n"""
+          if old_import not in text:
+              raise SystemExit("Expected import anchor not found")
+          text = text.replace(old_import, new_import, 1)
+
+          old_summary = '''    st.markdown('<div class="facts">' + fact("Diagnosis", case.diagnosis.value, source_ok(case.diagnosis)) + fact("Disease state", case.disease_state.value, source_ok(case.disease_state)) + fact("Molecular", mol_text, mol_verified) + fact("Age", case.age) + fact("Sex", case.sex) + fact("ECOG", case.performance_status.value if case.performance_status else None, source_ok(case.performance_status) if case.performance_status else None) + '</div>', unsafe_allow_html=True)'''
+          new_summary = '''    program = PROGRAM_BY_ID.get(case.disease_program)\n    program_label = program.display_name if program else human(case.disease_program)\n    validation = get_pathway_validation_status(case.disease_program)\n    stage_value = case.stage.value if case.stage is not None else None\n    stage_verified = source_ok(case.stage) if case.stage is not None else None\n    st.markdown('<div class="facts">' + fact("Tumor board", program_label) + fact("Validation", validation.label) + fact("Diagnosis", case.diagnosis.value, source_ok(case.diagnosis)) + fact("Disease state", case.disease_state.value, source_ok(case.disease_state)) + fact("Stage", stage_value, stage_verified) + fact("Molecular", mol_text, mol_verified) + fact("Age", case.age) + fact("Sex", case.sex) + fact("ECOG", case.performance_status.value if case.performance_status else None, source_ok(case.performance_status) if case.performance_status else None) + '</div>', unsafe_allow_html=True)'''
+          if old_summary not in text:
+              raise SystemExit("Expected case-summary anchor not found")
+          text = text.replace(old_summary, new_summary, 1)
+
+          old_confirm = '    facts = [confirmed.diagnosis, confirmed.disease_state, confirmed.performance_status]'
+          new_confirm = '    facts = [confirmed.diagnosis, confirmed.disease_state, confirmed.stage, confirmed.performance_status]'
+          if old_confirm not in text:
+              raise SystemExit("Expected confirmation anchor not found")
+          text = text.replace(old_confirm, new_confirm, 1)
+
+          path.write_text(text, encoding="utf-8")
+
+      - name: Commit workspace update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/pages/00_Clinical_Workspace.py
+          git diff --cached --quiet && exit 0
+          git commit -m "Show pan-oncology program, stage, and validation status in workspace"
+          git push origin HEAD:main

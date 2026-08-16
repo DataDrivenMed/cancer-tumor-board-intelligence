@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from agents.tumor_board_brief import render_tumor_board_brief
-from schemas.agent import RoutingDecision
 from schemas.case import CancerTumorBoardCase, ClinicalQuestion, Fact, Provenance
 from schemas.consensus import ConsensusCandidate, ConsensusDisposition, ConsensusReport
 from schemas.red_team import ClinicalRedTeamFinding, ClinicalRedTeamReport, RedTeamDisposition, RedTeamSeverity
@@ -95,7 +94,7 @@ def test_brief_preserves_red_team_blocker():
     report = render_tumor_board_brief(_case(), {}, _red(False), _consensus(False))
     red = next(s for s in report.sections if s.section_id == "red_team")
     assert any(item.label == "BLOCK" for item in red.items)
-    assert any("Recommendation-blocking" in limitation for item in red.items for limitation in item.limitations)
+    assert any("Recommendation blocking" in limitation for item in red.items for limitation in item.limitations)
 
 
 def test_canonical_fact_provenance_is_exposed():

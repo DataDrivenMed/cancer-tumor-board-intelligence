@@ -16,11 +16,11 @@ ValidationState = Literal[
 
 COMMON_CORE_QUALIFICATION = {
     "result": "pass",
-    "qualified_build": "22f26354dd5365cba25fc7aabf59dc054bc4c195",
-    "workflow_run_id": 31963999619,
+    "qualified_build": "b62217a3bc65321193195d782a593e093139d406",
+    "workflow_run_id": 31964312857,
     "matrix_executions": 210,
-    "dedicated_pan_oncology_tests_passed": 255,
-    "full_regression_tests_passed": 546,
+    "dedicated_pan_oncology_tests_passed": 261,
+    "full_regression_tests_passed": 555,
     "qualification_date": "2026-08-16",
 }
 

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from schemas.case import CancerTumorBoardCase
 from schemas.literature import LiteratureArticle, LiteratureReport, LiteratureSearchTrace
+from services.oncology_programs import is_registered_oncology_program
 from services.pubmed_client import PubMedClient, PubMedClientError
 
 
 AGENT_ID = "literature"
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 
 
 def _clean_phrase(value: object | None) -> str:
@@ -28,11 +29,6 @@ def _question_family(case: CancerTumorBoardCase) -> str:
 
 
 def _population_compatible(case: CancerTumorBoardCase, article: LiteratureArticle) -> bool:
-    """Exclude only obvious title-level pediatric/adult population mismatches.
-
-    This is deliberately conservative. It does not infer study applicability from an
-    abstract and does not turn retrieval into evidence appraisal.
-    """
     if case.age is None:
         return True
     title = article.title.lower()
@@ -46,12 +42,6 @@ def _population_compatible(case: CancerTumorBoardCase, article: LiteratureArticl
 
 
 def build_pubmed_query(case: CancerTumorBoardCase) -> tuple[str, list[str]]:
-    """Build a bounded PubMed query from structured clinical concepts only.
-
-    The free-text clinical question is used only to classify the question family. It
-    is never sent verbatim to PubMed. This reduces the risk of accidentally sending
-    identifiers or narrative details to an external public service.
-    """
     diagnosis = _clean_phrase(case.diagnosis.value)
     state = _clean_phrase(case.disease_state.value)
     if not diagnosis:
@@ -59,9 +49,8 @@ def build_pubmed_query(case: CancerTumorBoardCase) -> tuple[str, list[str]]:
 
     terms: list[str] = [f'"{diagnosis}"[Title/Abstract]']
     trace_terms: list[str] = [diagnosis]
-
     state_lower = state.lower()
-    useful_states = ("relapsed", "refractory", "progressive", "progression", "newly diagnosed", "untreated", "maintenance")
+    useful_states = ("relapsed", "refractory", "progressive", "progression", "newly diagnosed", "untreated", "maintenance", "metastatic", "recurrent")
     if state and any(token in state_lower for token in useful_states):
         terms.append(f'"{state}"[Title/Abstract]')
         trace_terms.append(state)
@@ -93,12 +82,7 @@ def build_pubmed_query(case: CancerTumorBoardCase) -> tuple[str, list[str]]:
 
 
 class LiteratureAgent:
-    """PubMed retrieval specialist with a strict claim boundary.
-
-    Version 1.1 retrieves and normalizes PubMed records and excludes only obvious
-    title-level age-population mismatches. It does not interpret study results, infer
-    efficacy, compare treatments, or convert abstracts into clinical recommendations.
-    """
+    """Pan-oncology PubMed retrieval specialist with a strict claim boundary."""
 
     agent_id = AGENT_ID
     agent_version = AGENT_VERSION
@@ -108,12 +92,12 @@ class LiteratureAgent:
         self.retmax = max(1, min(25, int(retmax)))
 
     def run(self, case: CancerTumorBoardCase) -> LiteratureReport:
-        if case.disease_program != "hematologic_malignancy":
+        if not is_registered_oncology_program(case.disease_program):
             return LiteratureReport(
                 case_id=case.case_id,
                 status="abstain_domain",
-                summary="Literature Agent v1 is restricted to hematologic malignancy cases.",
-                limitations=["Case is outside the v1 hematologic-malignancy domain."],
+                summary="Literature Agent received a case outside the registered oncology programs.",
+                limitations=["The disease program must be classified into the governed pan-oncology registry before retrieval."],
                 can_support_literature_claim=False,
             )
 
@@ -159,16 +143,12 @@ class LiteratureAgent:
 
         warnings: list[str] = []
         if len(articles) != len(search_result.pmids):
-            warnings.append(
-                f"ESearch returned {len(search_result.pmids)} PMID(s), while EFetch yielded {len(articles)} parseable record(s)."
-            )
+            warnings.append(f"ESearch returned {len(search_result.pmids)} PMID(s), while EFetch yielded {len(articles)} parseable record(s).")
 
         surfaced = [article for article in articles if _population_compatible(case, article)]
         excluded = len(articles) - len(surfaced)
         if excluded:
-            warnings.append(
-                f"Excluded {excluded} retrieved publication(s) from surfaced results because the title indicated an obvious age-population mismatch."
-            )
+            warnings.append(f"Excluded {excluded} retrieved publication(s) from surfaced results because the title indicated an obvious age-population mismatch.")
 
         if not surfaced:
             return LiteratureReport(

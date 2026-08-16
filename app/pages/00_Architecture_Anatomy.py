@@ -5,8 +5,15 @@ import streamlit as st
 from app.ui import apply_design_system, architecture_stage, connector, hero, badge
 
 
-st.set_page_config(page_title="Architecture Anatomy | Tumor Board Intelligence", page_icon="◉", layout="wide")
+st.set_page_config(page_title="Architecture Anatomy | Tumor Board Intelligence", page_icon="🧭", layout="wide")
 apply_design_system()
+
+with st.sidebar:
+    st.markdown("### System anatomy")
+    st.caption("Research v1.0")
+    st.page_link("main.py", label="Back to clinician workflow")
+    st.divider()
+    st.caption("This page explains the system. It is not part of the normal case workflow.")
 
 hero(
     "Anatomy of an evidence-grounded tumor-board intelligence system",
@@ -189,5 +196,7 @@ st.info(
 
 st.markdown("## How a clinician should experience it")
 st.write(
-    "The architecture above is intentionally deep, but the clinician-facing workflow should be shallow. A user should normally interact with only four moments: enter the case, verify what the system understood, run the analysis, and review the tumor-board brief. The remaining machinery should be available through Evidence and Audit views when deeper inspection is needed."
+    "The architecture above is intentionally deep, but the clinician-facing workflow is shallow. A user normally interacts with only four moments: enter the case, verify what the system understood, run the analysis, and review the tumor-board brief. Evidence and audit views are available only when deeper inspection is needed."
 )
+
+st.page_link("main.py", label="Return to clinician workflow")

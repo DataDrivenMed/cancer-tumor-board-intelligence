@@ -49,6 +49,18 @@ def _dedupe_terms(values: Iterable[str | None]) -> tuple[str, ...]:
     return tuple(ordered)
 
 
+def _queryable_therapy_term(value: str) -> bool:
+    term = " ".join(str(value or "").split()).strip()
+    if not term:
+        return False
+    normalized = term.lower()
+    if normalized.startswith("synthetic "):
+        return False
+    if re.fullmatch(r"(?:agent|drug|therapy|compound)\s+[a-z0-9]+", normalized):
+        return False
+    return True
+
+
 def _dedupe_molecular(records: Iterable[MolecularEvidenceRecord]) -> tuple[MolecularEvidenceRecord, ...]:
     out: dict[str, MolecularEvidenceRecord] = {}
     for record in records:
@@ -139,11 +151,12 @@ def collect_safety_candidates(
     api_key: str | None = None,
     limit_per_therapy: int = 5,
 ) -> tuple[tuple[FDALabelSectionCandidate, ...], tuple[str, ...], tuple[str, ...]]:
-    therapies = _dedupe_terms([
+    discovered_therapies = _dedupe_terms([
         *guideline_candidate_therapies(case, guideline_store),
         *represented_therapy_terms(case),
         *additional_therapy_terms,
     ])
+    therapies = tuple(term for term in discovered_therapies if _queryable_therapy_term(term))
     warnings: list[str] = []
     candidates: list[FDALabelSectionCandidate] = []
     client = FDALabelClient(api_key=api_key)

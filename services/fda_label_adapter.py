@@ -5,6 +5,7 @@ from datetime import date
 import json
 import re
 from typing import Callable
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -12,7 +13,7 @@ from schemas.safety import SafetyEvidenceRecord, SafetyEvidenceStore, SafetyEvid
 
 
 OPENFDA_LABEL_URL = "https://api.fda.gov/drug/label.json"
-ADAPTER_VERSION = "1.0.0"
+ADAPTER_VERSION = "1.1.0"
 
 
 class FDALabelClientError(RuntimeError):
@@ -49,11 +50,16 @@ class SafetyRecordAttestation:
 
 def _http_get(url: str, timeout: float) -> bytes:
     req = Request(url, headers={"User-Agent": "CancerTumorBoardIntelligence/1.0 FDA label adapter"})
-    with urlopen(req, timeout=timeout) as response:  # nosec B310 - generated from fixed HTTPS FDA origin
-        final = response.geturl()
-        if not final.startswith("https://api.fda.gov/"):
-            raise FDALabelClientError("openFDA request redirected outside api.fda.gov")
-        return response.read()
+    try:
+        with urlopen(req, timeout=timeout) as response:  # nosec B310 - generated from fixed HTTPS FDA origin
+            final = response.geturl()
+            if not final.startswith("https://api.fda.gov/"):
+                raise FDALabelClientError("openFDA request redirected outside api.fda.gov")
+            return response.read()
+    except HTTPError as exc:
+        if exc.code == 404:
+            return b'{"results": []}'
+        raise
 
 
 def _clean(value: object | None) -> str:

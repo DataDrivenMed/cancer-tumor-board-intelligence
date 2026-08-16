@@ -28,6 +28,7 @@ from services.evidence_commissioning import (
 from services.model_gateway import ModelGatewayError
 from services.oncology_programs import PROGRAM_BY_ID
 from services.pathway_validation import get_pathway_validation_status
+from services.tumor_board_pdf import build_tumor_board_pdf
 from services.runtime_agents import configure_workflow_runtime
 
 
@@ -445,6 +446,22 @@ else:
     with x1:
         if st.button("Start new case",use_container_width=True): reset()
     with x2:
+        pdf_bytes = build_tumor_board_pdf(result)
+        safe_case_id = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in str(case.case_id))
+        st.download_button(
+            "Download tumor board report (PDF)",
+            data=pdf_bytes,
+            file_name=f"tumor_board_{safe_case_id}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    with st.expander("Technical / audit export"):
         serial={k:(v.model_dump(mode="json") if hasattr(v,"model_dump") else v) for k,v in result.items()}
-        st.download_button("Download structured result",data=json.dumps(serial,indent=2,default=str),file_name="tumor_board_result.json",mime="application/json",use_container_width=True)
+        st.download_button(
+            "Download structured JSON",
+            data=json.dumps(serial,indent=2,default=str),
+            file_name=f"tumor_board_{safe_case_id}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
     st.caption("Clinical trial matching does not establish eligibility. This research system is decision support, not an autonomous treatment directive, and has not been clinically validated for patient care.")

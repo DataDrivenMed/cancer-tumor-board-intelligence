@@ -16,7 +16,7 @@ from schemas.molecular import (
 
 
 CIVIC_GRAPHQL_URL = "https://civicdb.org/api/graphql"
-ADAPTER_VERSION = "1.0.0"
+ADAPTER_VERSION = "1.1.0"
 
 
 class CIViCClientError(RuntimeError):
@@ -58,7 +58,6 @@ query MolecularEvidence($profile: String!, $disease: String!, $first: Int!) {
       evidenceRating
       evidenceDirection
       description
-      variantHgvs
       molecularProfile { id name }
       disease { id doid name displayName diseaseAliases }
       therapies { id name ncitId therapyAliases }
@@ -155,7 +154,6 @@ def _record_from_node(
     alteration_terms = [x for x in dict.fromkeys([
         _norm(requested_alteration),
         _norm(profile),
-        _norm(node.get("variantHgvs")),
     ]) if x]
 
     source = node.get("source") or {}

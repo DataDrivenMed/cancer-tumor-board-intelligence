@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from html import escape
 from typing import Any
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 NODES: list[dict[str, Any]] = [
@@ -296,51 +298,14 @@ def _node_html(node_id: str) -> str:
 def render_architecture_graph() -> None:
     architecture_css()
     st.markdown(
-        '<div class="arch-callout"><strong>Interactive architecture:</strong> The graph below shows the complete orchestration path, handoffs, gates, parallel specialist agents, human review points, Challenge Review, consensus, and outputs. <strong>Click an agent in the Agent Explorer below</strong> to see its purpose, inputs, outputs, safety limits, handoff criteria, and why it matters.</div>',
+        '<div class="arch-callout"><strong>Interactive architecture:</strong> Hover over any node to see its purpose, inputs, outputs, safety boundary, and handoff logic. <strong>Click or tap a node to pin the explanation.</strong> The detailed Agent Explorer remains below for deeper review.</div>',
         unsafe_allow_html=True,
     )
-
-    st.markdown('<div class="arch-flow">', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="arch-row">'
-        + _node_html("intake") + _node_html("extraction") + _node_html("confirmation") + _node_html("integrity") + _node_html("missing")
-        + '</div><div class="arch-edge"><b>Source available → provenance-bearing representation → human confirmation → deterministic integrity → explicit missingness</b></div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="arch-row">'
-        + _node_html("correction") + _node_html("clarification") + _node_html("apply") + _node_html("router") + '<div class="arch-node safety"><div class="arch-num">HUMAN</div><strong>Review points</strong><span>Confirm case representation, supply clarification, and attest candidate evidence before it is promoted into governed stores.</span></div>'
-        + '</div><div class="arch-edge"><b>Conflict → correction loop · blocking gap → clarification loop · case-ready → route by disease + question</b></div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="arch-row six">'
-        + _node_html("guideline") + _node_html("molecular") + _node_html("literature") + _node_html("translational") + _node_html("trials") + _node_html("safety")
-        + '</div><div class="arch-edge"><b>Parallel bounded specialist work. Each channel keeps its own source status, evidence, limitations, and abstention state.</b></div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="arch-sources"><div class="arch-source">ELN / governed guideline package → Guideline</div><div class="arch-source">CIViC / approved molecular evidence → Molecular</div><div class="arch-source">PubMed → Literature</div><div class="arch-source">Governed translational resources → Translational</div><div class="arch-source">ClinicalTrials.gov → Trials</div><div class="arch-source">openFDA / label evidence → Safety</div></div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown('<div class="arch-arrow">↓ specialist outputs + provenance</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="arch-row">'
-        + _node_html("join") + _node_html("redteam") + _node_html("consensus") + _node_html("brief") + _node_html("outputs")
-        + '</div><div class="arch-edge"><b>Join → independent challenge → consensus only if permitted → auditable brief → presentation/audit outputs</b></div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="arch-legend">'
-        '<span><i class="arch-dot" style="background:#316a9b"></i>Case representation / routing</span>'
-        '<span><i class="arch-dot" style="background:#b84d86"></i>Gates / clarification</span>'
-        '<span><i class="arch-dot" style="background:#18856c"></i>Evidence specialists</span>'
-        '<span><i class="arch-dot" style="background:#b67a00"></i>Missingness / human review</span>'
-        '<span><i class="arch-dot" style="background:#6c4aa4"></i>Challenge / consensus</span>'
-        '<span><i class="arch-dot" style="background:#173f67"></i>Final outputs</span>'
-        '</div></div>',
-        unsafe_allow_html=True,
-    )
+    asset = Path(__file__).resolve().parent / "assets" / "architecture_interactive.html"
+    if not asset.exists():
+        st.error("Interactive architecture asset is unavailable.")
+        return
+    components.html(asset.read_text(encoding="utf-8"), height=930, scrolling=True)
 
 
 def render_agent_explorer() -> None:

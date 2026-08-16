@@ -42,6 +42,8 @@ def _primitive(value: Any) -> Any:
         return [_primitive(v) for v in value]
     if hasattr(value, "value"):
         return _primitive(value.value)
+    if hasattr(value, "__dict__"):
+        return {str(k): _primitive(v) for k, v in vars(value).items() if not str(k).startswith("_")}
     return str(value)
 
 
@@ -83,9 +85,13 @@ def _fallback(question: str, context: dict[str, Any]) -> dict[str, Any]:
     if any(term in q for term in ("summar", "overview", "30 second")):
         parts = []
         case = context.get("case") or {}
-        diagnosis = ((case.get("diagnosis") or {}).get("value") if isinstance(case, dict) else None)
-        state = ((case.get("disease_state") or {}).get("value") if isinstance(case, dict) else None)
-        stage = ((case.get("stage") or {}).get("value") if isinstance(case, dict) else None)
+        def fact_value(value):
+            if isinstance(value, dict):
+                return value.get("value")
+            return value
+        diagnosis = fact_value(case.get("diagnosis")) if isinstance(case, dict) else None
+        state = fact_value(case.get("disease_state")) if isinstance(case, dict) else None
+        stage = fact_value(case.get("stage")) if isinstance(case, dict) else None
         if diagnosis:
             parts.append(f"Diagnosis: {diagnosis}.")
         if state or stage:
@@ -114,7 +120,7 @@ def _fallback(question: str, context: dict[str, Any]) -> dict[str, Any]:
         if text:
             return {
                 "status": "Evidence-backed",
-                "answer": "The governed record supports the following decision state rather than an unrestricted 'best treatment' claim: " + text,
+                "answer": "The current governed record supports the following decision state rather than an unrestricted 'best treatment' claim: " + text,
                 "supporting_sources": ["Consensus / final decision"],
                 "limitations": ["This answer is limited to the current governed record and does not establish a universally best treatment."],
             }

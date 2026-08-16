@@ -31,10 +31,11 @@ from services.pathway_validation import get_pathway_validation_status
 from services.tumor_board_pdf import build_tumor_board_pdf
 from services.runtime_agents import configure_workflow_runtime
 from app.faculty_ui import (
-    faculty_css, render_case_context, render_case_chat, render_feedback,
+    faculty_css, render_case_context, render_feedback,
     render_molecular_table, render_thirty_second_view, render_treatment_timeline,
     research_footer, top_navigation,
 )
+from app.chat_ui import render_governed_chat
 
 
 st.set_page_config(
@@ -57,14 +58,14 @@ html,body,[class*=css]{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSys
 [data-testid="stSidebar"],[data-testid="collapsedControl"]{display:none!important;}
 [data-testid="stHeader"]{background:transparent;}
 .block-container{max-width:1320px;padding:1.1rem 1.8rem 4rem;}
-.ws-top{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:0 0 14px}.ws-brand{display:flex;gap:10px;align-items:center}.ws-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(145deg,var(--navy),#0b2747);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}.ws-name{font-size:16px;font-weight:700;letter-spacing:-.025em}.ws-sub{font-size:10px;color:var(--muted);margin-top:2px}.ws-ready{font-size:11px;color:var(--muted)}
-.ws-nav{min-height:61px;padding:11px 8px 9px;border-bottom:2px solid transparent}.ws-nav.active{border-bottom-color:var(--blue)}.ws-nav.done{border-bottom-color:rgba(22,119,90,.42)}.ws-num{font-size:9px;font-weight:750;letter-spacing:.1em;color:#8994a5}.ws-label{font-size:12px;font-weight:600;color:var(--ink2);margin-top:4px}.ws-nav.active .ws-label{font-weight:750;color:var(--ink)}
-.ws-hero{padding:28px 0 20px;max-width:880px}.ws-eye{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue);font-weight:800;margin-bottom:9px}.ws-hero h1{font-size:38px;line-height:1.08;letter-spacing:-1.05px;font-weight:550;margin:0;color:var(--ink)}.ws-hero p{font-size:14px;line-height:1.55;color:var(--muted);max-width:780px;margin:11px 0 0}
-.ws-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:15px;box-shadow:0 1px 2px rgba(15,23,42,.025);margin-bottom:10px}.ws-card.raised{box-shadow:var(--shadow)}.ws-card.soft{background:var(--surface2);box-shadow:none}.ws-title{font-size:14px;font-weight:700;letter-spacing:-.1px}.ws-copy{font-size:11px;line-height:1.5;color:var(--muted);margin-top:4px}.ws-section{font-size:19px;font-weight:700;letter-spacing:-.35px;margin:9px 0 4px}.ws-section-sub{font-size:11px;color:var(--muted);margin-bottom:11px}
-.ws-call{background:var(--blueSoft);border:1px solid #d8e4ff;border-radius:var(--r);padding:11px 13px;font-size:11px;line-height:1.5;color:#405475;margin-bottom:16px}.ws-alert{background:var(--warnBg);border:1px solid #efdfaa;border-radius:var(--r);padding:11px 13px;font-size:11px;line-height:1.5;color:#765400;margin-bottom:12px}
-.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:5px 0 12px}.fact{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 13px;min-height:73px}.fl{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:750}.fv{font-size:14px;line-height:1.3;font-weight:650;margin-top:6px}.source{font-size:9px;color:var(--ok);margin-top:5px;font-weight:650}
-.chip{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:9px;font-weight:750;margin:2px 4px 2px 0}.ok{background:var(--okBg);color:var(--ok)}.warn{background:var(--warnBg);color:var(--warn)}.bad{background:var(--badBg);color:var(--bad)}.neutral{background:#edf1f6;color:#5d6878}
-.decision{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:11px}.decision-label{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:800}.decision-title{font-size:24px;line-height:1.14;font-weight:700;letter-spacing:-.5px;margin:7px 0 8px}.reason{padding:11px 12px;border-radius:10px;background:#fff;border:1px solid var(--line);margin:7px 0}.reason strong{font-size:11px}.reason div{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.45}.evidence-row{padding:12px 0;border-bottom:1px solid var(--line)}.evidence-row:last-child{border-bottom:0}.evidence-meta{font-size:10px;color:var(--muted);line-height:1.45}.evidence-text{font-size:12px;color:var(--ink2);line-height:1.5;margin-top:5px}
+.ws-top{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:0 0 14px}.ws-brand{display:flex;gap:10px;align-items:center}.ws-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(145deg,var(--navy),#0b2747);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}.ws-name{font-size:22px;font-weight:700;letter-spacing:-.025em}.ws-sub{font-size:13px;color:var(--muted);margin-top:2px}.ws-ready{font-size:12px;color:var(--muted)}
+.ws-nav{min-height:61px;padding:11px 8px 9px;border-bottom:2px solid transparent}.ws-nav.active{border-bottom-color:var(--blue)}.ws-nav.done{border-bottom-color:rgba(22,119,90,.42)}.ws-num{font-size:11px;font-weight:750;letter-spacing:.1em;color:#8994a5}.ws-label{font-size:14px;font-weight:600;color:var(--ink2);margin-top:4px}.ws-nav.active .ws-label{font-weight:750;color:var(--ink)}
+.ws-hero{padding:28px 0 20px;max-width:880px}.ws-eye{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue);font-weight:800;margin-bottom:9px}.ws-hero h1{font-size:43px;line-height:1.08;letter-spacing:-1.05px;font-weight:550;margin:0;color:var(--ink)}.ws-hero p{font-size:16px;line-height:1.55;color:var(--muted);max-width:780px;margin:11px 0 0}
+.ws-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:15px;box-shadow:0 1px 2px rgba(15,23,42,.025);margin-bottom:10px}.ws-card.raised{box-shadow:var(--shadow)}.ws-card.soft{background:var(--surface2);box-shadow:none}.ws-title{font-size:16px;font-weight:700;letter-spacing:-.1px}.ws-copy{font-size:13px;line-height:1.5;color:var(--muted);margin-top:4px}.ws-section{font-size:23px;font-weight:700;letter-spacing:-.35px;margin:9px 0 4px}.ws-section-sub{font-size:13px;color:var(--muted);margin-bottom:11px}
+.ws-call{background:var(--blueSoft);border:1px solid #d8e4ff;border-radius:var(--r);padding:12px 14px;font-size:13px;line-height:1.5;color:#405475;margin-bottom:16px}.ws-alert{background:var(--warnBg);border:1px solid #efdfaa;border-radius:var(--r);padding:12px 14px;font-size:13px;line-height:1.5;color:#765400;margin-bottom:12px}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:5px 0 12px}.fact{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 13px;min-height:73px}.fl{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:750}.fv{font-size:16px;line-height:1.3;font-weight:650;margin-top:6px}.source{font-size:10px;color:var(--ok);margin-top:5px;font-weight:650}
+.chip{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:750;margin:2px 4px 2px 0}.ok{background:var(--okBg);color:var(--ok)}.warn{background:var(--warnBg);color:var(--warn)}.bad{background:var(--badBg);color:var(--bad)}.neutral{background:#edf1f6;color:#5d6878}
+.decision{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:11px}.decision-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:800}.decision-title{font-size:24px;line-height:1.14;font-weight:700;letter-spacing:-.5px;margin:7px 0 8px}.reason{padding:11px 12px;border-radius:10px;background:#fff;border:1px solid var(--line);margin:7px 0}.reason strong{font-size:13px}.reason div{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.45}.evidence-row{padding:12px 0;border-bottom:1px solid var(--line)}.evidence-row:last-child{border-bottom:0}.evidence-meta{font-size:12px;color:var(--muted);line-height:1.45}.evidence-text{font-size:14px;color:var(--ink2);line-height:1.5;margin-top:5px}
 .stButton>button,.stDownloadButton>button,[data-testid=stFormSubmitButton] button{min-height:40px;border-radius:8px!important;border:1px solid #cbd5e1!important;background:#fff!important;color:var(--ink2)!important;font-size:12px!important;font-weight:650!important;box-shadow:none!important}.stButton>button[kind=primary],[data-testid=stFormSubmitButton] button[kind=primary]{background:var(--navy)!important;border-color:var(--navy)!important;color:#fff!important}.stButton>button:hover,.stDownloadButton>button:hover{border-color:#9eacc0!important;background:#f8fafc!important}
 .stTextInput input,.stTextArea textarea,.stSelectbox [data-baseweb=select]>div,.stNumberInput input,[data-testid=stFileUploader] section{border-radius:8px!important;border-color:var(--line)!important;background:#fff!important;box-shadow:none!important}.stTextInput label,.stTextArea label,.stSelectbox label,.stNumberInput label{font-size:11px!important;color:var(--ink2)!important}.stTabs [data-baseweb=tab-list]{gap:3px;border-bottom:1px solid var(--line)}.stTabs [data-baseweb=tab]{font-size:11px;padding:9px 11px}[data-testid=stExpander]{border:1px solid var(--line)!important;border-radius:10px!important;background:#fff!important}
 @media(max-width:850px){.block-container{padding-left:14px;padding-right:14px}.facts{grid-template-columns:repeat(2,1fr)}.ws-hero h1{font-size:32px}}@media(max-width:560px){.facts{grid-template-columns:1fr}.ws-ready{display:none}}
@@ -335,12 +336,12 @@ elif st.session_state.stage == "evidence":
         evidence_chat_outputs["molecular"] = {"status": "candidate_evidence_retrieved", "summary": f"{len(candidates.molecular_records)} bounded molecular candidate record(s) retrieved. These remain candidates until locally attested."}
     if candidates.safety_records:
         evidence_chat_outputs["safety"] = {"status": "candidate_evidence_retrieved", "summary": f"{len(candidates.safety_records)} bounded safety-label record(s) retrieved. These remain source candidates until locally attested."}
-    eq, chat = st.columns([1.55, .85], gap="large")
+    eq, chat = st.columns([1.32, 1.0], gap="large")
     with eq:
         st.markdown('<div class="fx-panel-title">Evidence channel readiness</div><div class="fx-panel-sub">Guidelines, molecular, and safety are commissioned here. Literature, trials, and translational channels run during analysis and remain independently labeled.</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="fx-status-grid"><div class="fx-status"><strong>Guidelines</strong><span>{escape(human(guideline_report.status))}</span></div><div class="fx-status"><strong>Molecular</strong><span>{len(candidates.molecular_records)} candidate record(s)</span></div><div class="fx-status"><strong>Safety</strong><span>{len(candidates.safety_records)} candidate record(s)</span></div></div>', unsafe_allow_html=True)
     with chat:
-        render_case_chat({"specialist_outputs": evidence_chat_outputs}, case, key_prefix="evidence")
+        render_governed_chat({"specialist_outputs": evidence_chat_outputs}, case, key_prefix="evidence")
     for warning in candidates.warnings: st.warning(warning)
     if candidates.candidate_therapies:
         st.caption("Guideline-candidate therapy concepts sent to safety-source retrieval: " + ", ".join(candidates.candidate_therapies))
@@ -403,7 +404,7 @@ elif st.session_state.stage == "analysis":
                 if st.button("Return to evidence review"): st.session_state.stage="evidence"; st.rerun()
                 st.stop()
     analysis_result = st.session_state.result or {}
-    a1, a2 = st.columns([1.55, .85], gap="large")
+    a1, a2 = st.columns([1.32, 1.0], gap="large")
     with a1:
         st.markdown('<div class="fx-panel-title">Analysis complete</div><div class="fx-panel-sub">Specialist outputs have passed through the configured integrity, missingness, challenge, and consensus path. Review the governed case-grounded query panel before opening the final brief.</div>', unsafe_allow_html=True)
         outputs = analysis_result.get("specialist_outputs", {}) or {}
@@ -412,7 +413,7 @@ elif st.session_state.stage == "analysis":
         if st.button("Open decision brief", type="primary", use_container_width=True):
             st.session_state.stage = "brief"; st.rerun()
     with a2:
-        render_case_chat(analysis_result, st.session_state.case, key_prefix="analysis")
+        render_governed_chat(analysis_result, st.session_state.case, key_prefix="analysis")
 
 else:
     result = st.session_state.result or {}
@@ -421,12 +422,12 @@ else:
     hero("Decision brief", "A structured view of the decision state and supporting evidence.", "Evidence availability, challenge findings, consensus, uncertainty, and abstention are made visible rather than compressed into a single answer.")
     case = result.get("case") or st.session_state.case
     render_thirty_second_view(result, case)
-    lead, chat = st.columns([1.55, .85], gap="large")
+    lead, chat = st.columns([1.32, 1.0], gap="large")
     with lead:
         st.markdown(f'<div class="fx-decision-banner"><div class="fx-lbl">Decision state</div><h2>{escape(human(decision))}</h2><p>{escape(txt(val(consensus,"summary",val(final,"abstention_reason","Decision-support state generated from current evidence."))))}</p></div>', unsafe_allow_html=True)
         st.markdown(f'<div class="fx-missing"><strong>What is missing?</strong><p>{escape(txt(val(missing,"summary","No missing-information summary is available.")))}</p></div>', unsafe_allow_html=True)
     with chat:
-        render_case_chat(result, case, key_prefix="brief")
+        render_governed_chat(result, case, key_prefix="brief")
     l,r = st.columns([.92,1.58], gap="large")
     with l:
         st.markdown(f'<div class="decision"><div class="decision-label">Decision state</div><div class="decision-title">{escape(human(decision))}</div>{chip(val(consensus,"status",decision))}<div class="ws-copy" style="margin-top:8px">{escape(txt(val(consensus,"summary",val(final,"abstention_reason","Decision-support state generated from current evidence."))))}</div></div>', unsafe_allow_html=True)

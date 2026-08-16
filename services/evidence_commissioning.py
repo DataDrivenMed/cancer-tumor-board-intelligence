@@ -37,6 +37,18 @@ _SAFETY_SECTIONS = {
 }
 
 
+def _dedupe_terms(values: Iterable[str | None]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        term = " ".join(str(value or "").split()).strip()
+        key = term.lower()
+        if term and key not in seen:
+            seen.add(key)
+            ordered.append(term)
+    return tuple(ordered)
+
+
 def _dedupe_molecular(records: Iterable[MolecularEvidenceRecord]) -> tuple[MolecularEvidenceRecord, ...]:
     out: dict[str, MolecularEvidenceRecord] = {}
     for record in records:
@@ -90,17 +102,48 @@ def guideline_candidate_therapies(
     if report.can_support_guideline_claim:
         for match in report.matched_guidance:
             therapies.extend(match.therapy_terms)
-    return tuple(dict.fromkeys(term for term in therapies if term))
+    return _dedupe_terms(therapies)
+
+
+def represented_therapy_terms(case: CancerTumorBoardCase) -> tuple[str, ...]:
+    """Return explicit treatment concepts already represented in the canonical case.
+
+    Individual agents are preferred. A regimen name is used only when no component
+    agents were represented for that treatment episode. These terms are used solely
+    for FDA label discovery and never create a treatment recommendation.
+    """
+    therapies: list[str] = []
+    for episode in case.treatments:
+        if episode.agents:
+            therapies.extend(episode.agents)
+        elif episode.regimen:
+            therapies.append(episode.regimen)
+    return _dedupe_terms(therapies)
+
+
+def molecular_candidate_therapies(records: Iterable[MolecularEvidenceRecord]) -> tuple[str, ...]:
+    """Return therapy concepts stated by retrieved CIViC candidate records.
+
+    Retrieval alone does not admit the molecular evidence or establish actionability.
+    The terms only widen bounded FDA-label discovery so safety review is not coupled
+    to the presence of a disease-specific formal guideline package.
+    """
+    return _dedupe_terms(record.therapy for record in records if record.therapy)
 
 
 def collect_safety_candidates(
     case: CancerTumorBoardCase,
     guideline_store: GuidelineEvidenceStore,
     *,
+    additional_therapy_terms: Iterable[str] = (),
     api_key: str | None = None,
     limit_per_therapy: int = 5,
 ) -> tuple[tuple[FDALabelSectionCandidate, ...], tuple[str, ...], tuple[str, ...]]:
-    therapies = guideline_candidate_therapies(case, guideline_store)
+    therapies = _dedupe_terms([
+        *guideline_candidate_therapies(case, guideline_store),
+        *represented_therapy_terms(case),
+        *additional_therapy_terms,
+    ])
     warnings: list[str] = []
     candidates: list[FDALabelSectionCandidate] = []
     client = FDALabelClient(api_key=api_key)
@@ -133,6 +176,7 @@ def collect_case_candidates(
     safety, therapies, sw = collect_safety_candidates(
         case,
         guideline_store,
+        additional_therapy_terms=molecular_candidate_therapies(molecular),
         api_key=openfda_api_key,
     )
     return CommissioningCandidates(
@@ -193,7 +237,7 @@ def build_approved_safety_store(
     """Create source-attested safety records from the exact FDA spans shown in UI.
 
     Selection attests that the displayed source span was reviewed and attributed to
-    the represented product/section. It does *not* infer that a contraindication or
+    the represented product/section. It does not infer that a contraindication or
     warning applies to this patient. Patient-specific contraindication logic requires
     a separately structured trigger and therefore remains false in this generic
     commissioning path.

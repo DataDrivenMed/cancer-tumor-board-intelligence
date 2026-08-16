@@ -11,9 +11,10 @@ from schemas.case import Provenance, TreatmentEpisode
 from services.document_parser import ParsedDocument
 from services.extraction_audit import serialize_events
 from services.extraction_hardening_v25 import harden_extraction_v25
+from services.oncology_programs import assign_case_program
 
 
-EXTRACTION_V25_VERSION = "2.5.0"
+EXTRACTION_V25_VERSION = "2.5.1"
 
 
 @dataclass
@@ -98,10 +99,13 @@ def extract_case_v25(
     model: str = "openai/gpt-oss-120b:fireworks-ai",
     case_id: str = "EXTRACTED-001",
 ) -> ExtractionPackageV25:
-    """Final pre-qualification hardening over v2.4.
+    """Provenance-preserving extraction with deterministic pan-oncology board assignment.
 
     The v2.4 uncertainty/provenance architecture is preserved. v2.5 adds only
     deterministic treatment deduplication and missing-information ontology repair.
+    Product integration 2.5.1 additionally classifies the already represented,
+    source-backed diagnosis into a governed tumor-board program. It does not infer
+    diagnosis, stage, treatment, or actionability.
     """
     base: ExtractionPackageV24 = extract_case_v24(
         document=document,
@@ -111,11 +115,9 @@ def extract_case_v25(
     )
     hardened = harden_extraction_v25(document=document, payload=base.normalized_extraction)
     normalized = hardened.payload
-    case = base.case.model_copy(deep=True)
+    case = assign_case_program(base.case)
     failures = list(base.provenance_failures)
 
-    # v2.5 changes treatment representation, so rebuild the canonical treatment list
-    # from the hardened normalized payload and recompute provenance from the final case.
     failures = [item for item in failures if not item.startswith("treatment:")]
     case.treatments = _rebuild_treatments(normalized, document, failures)
 

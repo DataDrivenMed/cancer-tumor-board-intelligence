@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.faculty_ui import render_overview
+from app.overview_ui import render_final_overview
 
 st.set_page_config(
     page_title="Pan-Oncology Tumor Board Intelligence",
@@ -17,4 +17,4 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-render_overview()
+render_final_overview()

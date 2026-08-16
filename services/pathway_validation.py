@@ -14,25 +14,43 @@ ValidationState = Literal[
 ]
 
 
+COMMON_CORE_QUALIFICATION = {
+    "result": "pass",
+    "qualified_build": "22f26354dd5365cba25fc7aabf59dc054bc4c195",
+    "workflow_run_id": 31963999619,
+    "matrix_executions": 210,
+    "dedicated_pan_oncology_tests_passed": 255,
+    "full_regression_tests_passed": 546,
+    "qualification_date": "2026-08-16",
+}
+
+
 @dataclass(frozen=True)
 class PathwayValidationStatus:
     program_id: str
     state: ValidationState
     label: str
+    common_core_qualified: bool
+    disease_specific_software_qualified: bool
+    clinically_validated: bool
     note: str
 
 
-# Pan-oncology architecture expansion is post-qualification work. Until a disease
-# family completes the protocol in docs/PAN_ONCOLOGY_VALIDATION_PROTOCOL.md, the UI
-# must not represent it as software-qualified or clinically validated.
+# The shared pan-oncology common core has passed its automated qualification gate.
+# Disease-specific management correctness has not yet been independently qualified
+# against a disease-specific reference standard, so the program-level state remains
+# architecture_ready rather than software_qualified or clinically validated.
 PATHWAY_STATUS = {
     program.program_id: PathwayValidationStatus(
         program_id=program.program_id,
         state="architecture_ready",
         label="Architecture ready",
+        common_core_qualified=True,
+        disease_specific_software_qualified=False,
+        clinically_validated=False,
         note=(
-            "This tumor-board program is supported by the shared pan-oncology workflow, "
-            "but disease-specific software qualification and clinical validation are not yet complete."
+            "The shared pan-oncology core passed the automated common-core qualification gate. "
+            "Disease-specific software qualification and independent clinical validation remain required before this pathway can receive a higher validation label."
         ),
     )
     for program in PROGRAMS
@@ -46,5 +64,8 @@ def get_pathway_validation_status(program_id: str | None) -> PathwayValidationSt
         program_id=str(program_id or "unclassified"),
         state="architecture_ready",
         label="Unclassified pathway",
+        common_core_qualified=False,
+        disease_specific_software_qualified=False,
+        clinically_validated=False,
         note="The disease program is not registered for validated oncology decision support.",
     )

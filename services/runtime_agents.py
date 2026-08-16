@@ -10,12 +10,8 @@ from agents.molecular import MolecularInterpretationAgent
 from agents.safety import SafetyAgent
 from agents.translational import TranslationalBiologyAgent
 from services.clinicaltrials_client import ClinicalTrialsClient
-from services.guideline_sources import PRODUCTION_GUIDELINE_STATUS, PRODUCTION_GUIDELINE_STORE
-from services.molecular_sources import PRODUCTION_MOLECULAR_STATUS, PRODUCTION_MOLECULAR_STORE
 from services.production_evidence_config import bool_env
 from services.pubmed_client import PubMedClient
-from services.safety_sources import PRODUCTION_SAFETY_STATUS, PRODUCTION_SAFETY_STORE
-from services.translational_sources import PRODUCTION_TRANSLATIONAL_STATUS, PRODUCTION_TRANSLATIONAL_STORE
 
 
 def _pubmed_agent() -> tuple[LiteratureAgent, dict[str, Any]]:
@@ -44,28 +40,59 @@ def _trials_agent() -> tuple[ClinicalTrialsAgent, dict[str, Any]]:
     return ClinicalTrialsAgent(ClinicalTrialsClient()), {"enabled": True, "ready": True}
 
 
-def build_runtime_registry() -> tuple[dict[str, Any], dict[str, Any]]:
-    """Build the clinical specialist registry from governed stores and public clients.
+def _governed_stores():
+    """Load governed stores at runtime after deployment secrets/env are available."""
+    from services import guideline_sources, molecular_sources, safety_sources, translational_sources
 
-    No secret values are returned in status. Evidence stores remain empty and fail
-    closed when deployment configuration is absent or invalid.
+    guideline_store, guideline_status = guideline_sources._load_production_guideline_store()
+    molecular_store, molecular_status = molecular_sources._load_production_molecular_store()
+    safety_store, safety_status = safety_sources._load_production_safety_store()
+    translational_store, translational_status = translational_sources._load_production_translational_store()
+    return (
+        guideline_store,
+        guideline_status,
+        molecular_store,
+        molecular_status,
+        safety_store,
+        safety_status,
+        translational_store,
+        translational_status,
+    )
+
+
+def build_runtime_registry() -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the specialist registry from governed stores and official public clients.
+
+    This function intentionally reloads evidence configuration on every product
+    initialization so Streamlit Secrets copied into environment variables immediately
+    before this call are honored. No secret values are returned in status.
     """
     literature, pubmed_status = _pubmed_agent()
     trials, trials_status = _trials_agent()
+    (
+        guideline_store,
+        guideline_status,
+        molecular_store,
+        molecular_status,
+        safety_store,
+        safety_status,
+        translational_store,
+        translational_status,
+    ) = _governed_stores()
 
     registry = {
-        "guideline": GuidelineAgent(PRODUCTION_GUIDELINE_STORE),
-        "molecular": MolecularInterpretationAgent(PRODUCTION_MOLECULAR_STORE, production_mode=True),
-        "translational": TranslationalBiologyAgent(PRODUCTION_TRANSLATIONAL_STORE, production_mode=True),
+        "guideline": GuidelineAgent(guideline_store),
+        "molecular": MolecularInterpretationAgent(molecular_store, production_mode=True),
+        "translational": TranslationalBiologyAgent(translational_store, production_mode=True),
         "literature": literature,
         "clinical_trials": trials,
-        "safety": SafetyAgent(PRODUCTION_SAFETY_STORE, production_mode=True),
+        "safety": SafetyAgent(safety_store, production_mode=True),
     }
     status = {
-        "guideline": PRODUCTION_GUIDELINE_STATUS.__dict__,
-        "molecular": PRODUCTION_MOLECULAR_STATUS.__dict__,
-        "translational": PRODUCTION_TRANSLATIONAL_STATUS.__dict__,
-        "safety": PRODUCTION_SAFETY_STATUS.__dict__,
+        "guideline": guideline_status.__dict__,
+        "molecular": molecular_status.__dict__,
+        "translational": translational_status.__dict__,
+        "safety": safety_status.__dict__,
         "pubmed": pubmed_status,
         "clinical_trials": trials_status,
     }
@@ -73,11 +100,10 @@ def build_runtime_registry() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def configure_workflow_runtime() -> dict[str, Any]:
-    """Install the deployment-specific registry into the existing orchestrator.
+    """Install deployment-specific agents into the existing core orchestrator.
 
-    Kept outside orchestration.workflow to preserve the qualified core workflow file
-    while allowing product deployments to opt into current public retrieval and
-    authorized evidence packages.
+    Kept outside `orchestration.workflow` so product integration does not rewrite the
+    qualified core workflow file. The safety gates and consensus logic are unchanged.
     """
     from orchestration import workflow
 

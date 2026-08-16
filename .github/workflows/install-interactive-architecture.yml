@@ -1,0 +1,60 @@
+name: Install Interactive Architecture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/install-interactive-architecture.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Replace static architecture cards with interactive diagram
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('app/architecture_ui.py')
+          text = path.read_text(encoding='utf-8')
+
+          if 'from pathlib import Path' not in text:
+              text = text.replace('import time\n', 'import time\nfrom pathlib import Path\n', 1)
+          if 'import streamlit.components.v1 as components' not in text:
+              text = text.replace('import streamlit as st\n', 'import streamlit as st\nimport streamlit.components.v1 as components\n', 1)
+
+          replacement = '''def render_architecture_graph() -> None:\n    architecture_css()\n    st.markdown(\n        '<div class="arch-callout"><strong>Interactive architecture:</strong> Hover over any node to see its purpose, inputs, outputs, safety boundary, and handoff logic. <strong>Click or tap a node to pin the explanation.</strong> The detailed Agent Explorer remains below for deeper review.</div>',\n        unsafe_allow_html=True,\n    )\n    asset = Path(__file__).resolve().parent / "assets" / "architecture_interactive.html"\n    if not asset.exists():\n        st.error("Interactive architecture asset is unavailable.")\n        return\n    components.html(asset.read_text(encoding="utf-8"), height=930, scrolling=True)\n\n\n'''
+
+          pattern = re.compile(r'def render_architecture_graph\(\) -> None:\n.*?(?=def render_agent_explorer\(\) -> None:)', re.S)
+          if not pattern.search(text):
+              raise SystemExit('render_architecture_graph block not found')
+          text = pattern.sub(replacement, text, count=1)
+          path.write_text(text, encoding='utf-8')
+
+          test = Path('tests/test_interactive_architecture.py')
+          test.write_text('''from pathlib import Path\n\n\ndef test_architecture_uses_interactive_html_asset():\n    ui = Path("app/architecture_ui.py").read_text(encoding="utf-8")\n    asset = Path("app/assets/architecture_interactive.html").read_text(encoding="utf-8")\n    assert "components.html" in ui\n    assert "architecture_interactive.html" in ui\n    assert "Hover over any node" in ui\n    assert "data-id=\\\"intake\\\"" in asset\n    assert "Case Intake /" in asset\n    assert "Purpose:" in asset\n    assert "Safety boundary:" in asset\n    assert "Handoff:" in asset\n    assert "pathology · imaging" not in asset\n\n\ndef test_old_static_card_graph_is_not_rendered():\n    ui = Path("app/architecture_ui.py").read_text(encoding="utf-8")\n    start = ui.index("def render_architecture_graph")\n    end = ui.index("def render_agent_explorer")\n    block = ui[start:end]\n    assert "_node_html(\\\"intake\\\")" not in block\n    assert "Parallel bounded specialist work" not in block\n''', encoding='utf-8')
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate architecture and regression suite
+        run: |
+          python -m py_compile app/architecture_ui.py app/pages/03_Architecture.py
+          python -m pytest -q tests/test_interactive_architecture.py tests/test_final_faculty_product.py tests/test_faculty_experience_ui.py
+          python -m pytest -q
+
+      - name: Commit interactive architecture
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/architecture_ui.py tests/test_interactive_architecture.py
+          git commit -m "Replace static architecture cards with interactive diagram"
+          git push origin HEAD:main

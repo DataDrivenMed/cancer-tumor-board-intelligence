@@ -447,7 +447,8 @@ else:
         if st.button("Start new case",use_container_width=True): reset()
     with x2:
         pdf_bytes = build_tumor_board_pdf(result)
-        safe_case_id = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in str(case.case_id))
+        report_case = result.get("case") or st.session_state.case
+        safe_case_id = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in str(report_case.case_id))
         st.download_button(
             "Download tumor board report (PDF)",
             data=pdf_bytes,

@@ -1,0 +1,64 @@
+name: Final Faculty Product Upgrade v3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/final-faculty-product-upgrade-v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply final product and regression fixes
+        shell: python
+        run: |
+          from pathlib import Path
+          import textwrap
+
+          # Apply the previously validated UI/chat integration patch.
+          workflow = Path('.github/workflows/final-faculty-product-upgrade.yml').read_text(encoding='utf-8')
+          start = '      - name: Patch final faculty UI and governed chat integration\n        shell: python\n        run: |\n'
+          end = '      - name: Install dependencies\n'
+          block = workflow.split(start, 1)[1].split(end, 1)[0]
+          exec(compile(textwrap.dedent(block), 'final-faculty-product-patch', 'exec'))
+
+          # Keep the earlier governed-chat regression path valid too. It remains a
+          # compatibility service, while the final workspace uses services/governed_chat.py.
+          legacy = Path('services/governed_tumor_board_chat.py')
+          t = legacy.read_text(encoding='utf-8')
+          old = '    if hasattr(value, "value"):\n        return _primitive(value.value)\n    return str(value)\n'
+          new = '    if hasattr(value, "value"):\n        return _primitive(value.value)\n    if hasattr(value, "__dict__"):\n        return {str(k): _primitive(v) for k, v in vars(value).items() if not str(k).startswith("_")}\n    return str(value)\n'
+          if old not in t:
+              raise SystemExit('legacy primitive anchor missing')
+          t = t.replace(old, new, 1)
+          t = t.replace(
+              '"answer": "The governed record supports the following decision state rather than an unrestricted \'best treatment\' claim: " + text,',
+              '"answer": "The current governed record supports the following decision state rather than an unrestricted \'best treatment\' claim: " + text,',
+              1,
+          )
+          legacy.write_text(t, encoding='utf-8')
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate full product
+        run: |
+          python -m py_compile app/main.py app/faculty_ui.py app/overview_ui.py app/architecture_ui.py app/chat_ui.py app/pages/00_Clinical_Workspace.py app/pages/03_Architecture.py services/governed_chat.py services/governed_tumor_board_chat.py
+          python -m pytest -q tests/test_final_faculty_product.py tests/test_faculty_experience_ui.py tests/test_governed_tumor_board_chat.py tests/test_workspace_pdf_case_reference.py tests/test_tumor_board_pdf.py
+          python -m pytest -q
+
+      - name: Commit final product
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/faculty_ui.py app/pages/00_Clinical_Workspace.py services/governed_tumor_board_chat.py tests/test_final_faculty_product.py
+          git commit -m "Finalize faculty architecture UI and governed reasoning chat"
+          git push origin HEAD:main

@@ -14,7 +14,7 @@ from schemas.guideline import (
 
 
 AGENT_ID = "guideline"
-AGENT_VERSION = "1.0.0"
+AGENT_VERSION = "1.1.0"
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,35 @@ def _text_match(case_value: object | None, allowed_terms: list[str]) -> bool:
         if term_tokens and term_tokens.issubset(case_tokens):
             return True
     return False
+
+
+def _verified_molecular_text(case: CancerTumorBoardCase) -> str:
+    values: list[str] = []
+    for finding in case.molecular_findings:
+        if not finding.human_verified:
+            continue
+        if not any(bool(getattr(p, "source_verified", False)) for p in (finding.provenance or [])):
+            continue
+        values.extend(
+            str(value)
+            for value in (
+                finding.gene,
+                finding.alteration_type,
+                finding.hgvs_c,
+                finding.hgvs_p,
+            )
+            if value
+        )
+    return _norm(" ".join(values))
+
+
+def _molecular_requirements_match(case: CancerTumorBoardCase, required_terms: list[str]) -> bool:
+    if not required_terms:
+        return True
+    represented = _verified_molecular_text(case)
+    if not represented:
+        return False
+    return all(_norm(term) and _norm(term) in represented for term in required_terms)
 
 
 def _question_domain(case: CancerTumorBoardCase) -> str:
@@ -83,12 +112,7 @@ def _label(source_type: GuidanceSourceType) -> str:
 
 
 class GuidelineAgent:
-    """Evidence-bounded guidance matcher.
-
-    The agent never invents guideline content. It only returns recommendations that
-    already exist in a verified evidence store and match the represented case.
-    Synthetic fixtures are disabled by default and are intended only for tests/UI demos.
-    """
+    """Evidence-bounded guidance matcher with molecular prerequisites."""
 
     agent_id = AGENT_ID
     agent_version = AGENT_VERSION
@@ -156,6 +180,7 @@ class GuidelineAgent:
         question_domain = _question_domain(case)
         matches: list[GuidanceMatch] = []
         expired_or_outdated = 0
+        molecular_prerequisite_misses = 0
 
         for rec in verified_recommendations:
             source = source_by_id[rec.source_id]
@@ -168,6 +193,9 @@ class GuidelineAgent:
                 continue
             if rec.question_domains and question_domain not in rec.question_domains:
                 continue
+            if not _molecular_requirements_match(case, rec.required_molecular_terms):
+                molecular_prerequisite_misses += 1
+                continue
 
             dimensions: list[str] = []
             if rec.disease_terms:
@@ -176,6 +204,8 @@ class GuidelineAgent:
                 dimensions.append("disease_state")
             if rec.question_domains:
                 dimensions.append("question_domain")
+            if rec.required_molecular_terms:
+                dimensions.append("verified_molecular_prerequisite")
 
             matches.append(GuidanceMatch(
                 recommendation_id=rec.recommendation_id,
@@ -190,6 +220,8 @@ class GuidelineAgent:
                 strength=rec.strength,
                 evidence_level=rec.evidence_level,
                 match_dimensions=dimensions,
+                required_molecular_terms=rec.required_molecular_terms,
+                therapy_terms=rec.therapy_terms,
                 conditions=rec.conditions,
                 exclusions=rec.exclusions,
                 epistemic_label=_label(source.source_type),
@@ -206,6 +238,10 @@ class GuidelineAgent:
         limitations: list[str] = []
         if expired_or_outdated:
             warnings.append(f"{expired_or_outdated} verified recommendation(s) were excluded because the source/recommendation was not current on {self.today.isoformat()}.")
+        if molecular_prerequisite_misses:
+            limitations.append(
+                f"{molecular_prerequisite_misses} targeted recommendation(s) were excluded because required molecular prerequisites were not represented with verified case provenance."
+            )
         if matches and formal_matches == 0:
             limitations.append(
                 "Matched evidence does not include a formal or consensus guideline; it must not be described as a guideline recommendation."
@@ -222,7 +258,7 @@ class GuidelineAgent:
                 formal_guideline_matches=0,
                 warnings=warnings,
                 limitations=limitations,
-                summary="No current verified guidance recommendation matched the represented diagnosis, disease state, and question domain.",
+                summary="No current verified guidance recommendation matched the represented diagnosis, disease state, question domain, and required molecular prerequisites.",
                 can_support_guideline_claim=False,
             )
 

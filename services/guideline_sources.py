@@ -47,18 +47,15 @@ def _load_production_guideline_store() -> tuple[GuidelineEvidenceStore, Evidence
         )
 
 
-# Production remains fail-closed when no authorized source is configured. A licensed
-# or public evidence package can be supplied at deployment through
-# GUIDELINE_EVIDENCE_JSON or GUIDELINE_EVIDENCE_PATH without editing source code.
+# Core production configuration remains fail-closed when no deployment evidence
+# package is configured. The clinician product may explicitly install a bounded
+# public evidence store for a specific supported workflow at runtime; this does not
+# change the default backend contract or historical regression semantics.
 PRODUCTION_GUIDELINE_STORE, PRODUCTION_GUIDELINE_STATUS = _load_production_guideline_store()
 
 
 def synthetic_guideline_store() -> GuidelineEvidenceStore:
-    """Synthetic evidence only for deterministic software testing and UI demonstrations.
-
-    These statements are intentionally fictional and must never be interpreted as
-    clinical guidance. GuidelineAgent requires allow_synthetic=True to use them.
-    """
+    """Synthetic evidence only for deterministic software testing and UI demonstrations."""
     source = GuidanceSource(
         source_id="SYN-GUIDE-001",
         title="Synthetic Hematologic Malignancy Guidance Fixture",

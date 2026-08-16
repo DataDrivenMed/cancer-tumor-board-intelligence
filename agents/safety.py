@@ -11,20 +11,21 @@ from schemas.safety import (
 
 
 AGENT_ID = "safety"
-AGENT_VERSION = "1.0.0"
+AGENT_VERSION = "1.1.0"
 
 
 def _norm(value: object | None) -> str:
     return " ".join(str(value or "").lower().replace("_", " ").replace("-", " ").split())
 
 
-def _therapy_text(case: CancerTumorBoardCase) -> str:
+def _therapy_text(case: CancerTumorBoardCase, candidate_therapy_terms: list[str] | None = None) -> str:
     parts: list[str] = []
     for episode in case.treatments:
         parts.extend([episode.regimen, *episode.agents])
     for fact in case.current_medications:
         if fact.status == DataStatus.CONFIRMED:
             parts.extend([fact.field, str(fact.value or "")])
+    parts.extend(candidate_therapy_terms or [])
     return _norm(" ".join(parts))
 
 
@@ -47,11 +48,16 @@ def _patient_context_text(case: CancerTumorBoardCase) -> str:
     return _norm(" ".join(parts))
 
 
-def _record_matches(case: CancerTumorBoardCase, record: SafetyEvidenceRecord) -> tuple[bool, list[str], list[str]]:
+def _record_matches(
+    case: CancerTumorBoardCase,
+    record: SafetyEvidenceRecord,
+    *,
+    candidate_therapy_terms: list[str] | None = None,
+) -> tuple[bool, list[str], list[str]]:
     if not record.source_verified or not record.human_verified:
         return False, [], []
 
-    therapy_text = _therapy_text(case)
+    therapy_text = _therapy_text(case, candidate_therapy_terms)
     therapy_matches = [term for term in record.therapy_terms if _norm(term) and _norm(term) in therapy_text]
     if record.therapy_terms and not therapy_matches:
         return False, [], []
@@ -90,9 +96,10 @@ def _parameter_is_represented(case: CancerTumorBoardCase, parameter: str) -> boo
 class SafetyAgent:
     """Evidence-bounded safety specialist.
 
-    Version 1 is deterministic. It matches represented therapies and patient-context
-    triggers to pre-verified safety evidence. It never infers a contraindication,
-    interaction, dose adjustment, or monitoring requirement from model memory.
+    Version 1.1 can evaluate represented therapies plus explicit candidate therapy
+    terms supplied by the orchestrator/runtime wrapper. It still matches only
+    pre-verified safety evidence and never infers a contraindication, interaction,
+    dose adjustment, or monitoring requirement from model memory.
     """
 
     agent_id = AGENT_ID
@@ -102,7 +109,12 @@ class SafetyAgent:
         self.store = store or SafetyEvidenceStore()
         self.production_mode = production_mode
 
-    def run(self, case: CancerTumorBoardCase) -> SafetyReport:
+    def run(
+        self,
+        case: CancerTumorBoardCase,
+        *,
+        candidate_therapy_terms: list[str] | None = None,
+    ) -> SafetyReport:
         if case.disease_program != "hematologic_malignancy":
             return SafetyReport(
                 case_id=case.case_id,
@@ -128,7 +140,11 @@ class SafetyAgent:
 
         findings: list[SafetyFinding] = []
         for record in usable:
-            matched, therapy_matches, trigger_matches = _record_matches(case, record)
+            matched, therapy_matches, trigger_matches = _record_matches(
+                case,
+                record,
+                candidate_therapy_terms=candidate_therapy_terms,
+            )
             if not matched:
                 continue
             unresolved = [p for p in record.required_parameters if not _parameter_is_represented(case, p)]
@@ -158,7 +174,7 @@ class SafetyAgent:
             return SafetyReport(
                 case_id=case.case_id,
                 status="no_evidence_found",
-                summary="No verified safety record matched the represented therapies and patient context.",
+                summary="No verified safety record matched the represented or candidate therapies and patient context.",
                 limitations=["No match does not establish that the therapy is safe or free of contraindications."],
             )
 
@@ -178,7 +194,7 @@ class SafetyAgent:
                 "Safety matching does not replace prescribing information, pharmacy review, organ-function assessment, or clinician judgment.",
                 "A matched warning is not itself a treatment recommendation; a non-match is not evidence of safety.",
             ],
-            summary=f"Matched {len(findings)} verified safety evidence record(s) to represented case concepts.",
+            summary=f"Matched {len(findings)} verified safety evidence record(s) to represented or candidate therapy concepts.",
             can_support_safety_claim=True,
             recommendation_blocking=blocking,
         )

@@ -124,6 +124,10 @@ class CancerTumorBoardCase(BaseModel):
 
     diagnosis: Fact
     disease_state: Fact
+    # Optional first-class stage fact. It is populated only from explicit source text
+    # or an independently governed structured source. It must never be inferred from
+    # TNM, imaging, pathology, or model knowledge merely because those data are present.
+    stage: Fact | None = None
     performance_status: Fact | None = None
 
     pathology: list[Fact] = Field(default_factory=list)

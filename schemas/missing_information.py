@@ -35,6 +35,7 @@ class MissingInformationItem(BaseModel):
         "molecular",
         "performance_status",
         "disease_state",
+        "stage",
         "treatment_history",
         "treatment_plan",
         "conflict_resolution",
@@ -53,7 +54,7 @@ class MissingInformationItem(BaseModel):
 
 class MissingInformationReport(BaseModel):
     agent_id: str = "missing_information"
-    agent_version: str = "1.0.0"
+    agent_version: str = "1.1.0"
     case_id: str
     disposition: MissingInformationDisposition
     items: list[MissingInformationItem] = Field(default_factory=list)

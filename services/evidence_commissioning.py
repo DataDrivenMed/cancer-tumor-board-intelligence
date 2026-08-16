@@ -50,11 +50,7 @@ def collect_molecular_candidates(
     api_key: str | None = None,
     limit_per_finding: int = 25,
 ) -> tuple[tuple[MolecularEvidenceRecord, ...], tuple[str, ...]]:
-    """Retrieve accepted CIViC evidence candidates for represented case findings.
-
-    Retrieval is not verification. Returned records remain ``human_verified=False``
-    until the clinician explicitly approves individual evidence IDs.
-    """
+    """Retrieve accepted CIViC evidence candidates for represented case findings."""
     client = CIViCMolecularClient(api_key=api_key)
     disease = str(case.diagnosis.value or "").strip()
     records: list[MolecularEvidenceRecord] = []
@@ -71,7 +67,6 @@ def collect_molecular_candidates(
             records.extend(result.records)
             warnings.extend(result.warnings)
             if not result.records and finding.alteration_type:
-                # Bounded fallback: search the represented gene in the same disease.
                 fallback = client.fetch(
                     gene=finding.gene,
                     alteration=None,
@@ -105,7 +100,6 @@ def collect_safety_candidates(
     api_key: str | None = None,
     limit_per_therapy: int = 5,
 ) -> tuple[tuple[FDALabelSectionCandidate, ...], tuple[str, ...], tuple[str, ...]]:
-    """Retrieve FDA SPL sections for structured guideline-candidate therapies."""
     therapies = guideline_candidate_therapies(case, guideline_store)
     warnings: list[str] = []
     candidates: list[FDALabelSectionCandidate] = []
@@ -118,7 +112,6 @@ def collect_safety_candidates(
         except Exception as exc:
             warnings.append(f"FDA label retrieval failed for {therapy}: {type(exc).__name__}: {exc}")
 
-    # Stable dedupe across duplicate generic/brand SPL search hits.
     unique: dict[tuple[str | None, str, str], FDALabelSectionCandidate] = {}
     for candidate in candidates:
         unique.setdefault((candidate.spl_set_id, candidate.section, candidate.text), candidate)
@@ -158,7 +151,6 @@ def build_approved_molecular_store(
 
 
 def safety_candidate_excerpt(candidate: FDALabelSectionCandidate, *, max_chars: int = 650) -> str:
-    """Return the exact bounded source span displayed for human attestation."""
     text = " ".join(candidate.text.split()).strip()
     if len(text) <= max_chars:
         return text
@@ -190,15 +182,6 @@ def _safety_severity(section: str) -> SafetySeverity:
     return SafetySeverity.MODERATE
 
 
-def _contraindication_flag(candidate: FDALabelSectionCandidate) -> bool:
-    if candidate.section != "contraindications":
-        return False
-    text = " ".join(candidate.text.lower().split())
-    if re.search(r"\bno contraindications\b|\bnone\b", text[:120]):
-        return False
-    return "contraindicat" in text
-
-
 def _safe_id(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-") or "record"
 
@@ -207,11 +190,13 @@ def build_approved_safety_store(
     candidates: list[FDALabelSectionCandidate] | tuple[FDALabelSectionCandidate, ...],
     approved_indices: set[int],
 ) -> SafetyEvidenceStore:
-    """Create human-attested safety records from exactly the source spans shown in UI.
+    """Create source-attested safety records from the exact FDA spans shown in UI.
 
-    Selecting a candidate is the explicit local attestation event. No unselected FDA
-    section is marked human-verified, and no safety interpretation is generated from
-    model memory.
+    Selection attests that the displayed source span was reviewed and attributed to
+    the represented product/section. It does *not* infer that a contraindication or
+    warning applies to this patient. Patient-specific contraindication logic requires
+    a separately structured trigger and therefore remains false in this generic
+    commissioning path.
     """
     attestations: list[SafetyRecordAttestation] = []
     for index in sorted(approved_indices):
@@ -226,15 +211,13 @@ def build_approved_safety_store(
         attestations.append(
             SafetyRecordAttestation(
                 candidate_index=index,
-                evidence_id=(
-                    f"FDA-SPL-{_safe_id(source_token)}-{_safe_id(candidate.section)}-{index}"
-                ),
+                evidence_id=f"FDA-SPL-{_safe_id(source_token)}-{_safe_id(candidate.section)}-{index}",
                 evidence_type=_safety_type(candidate.section),
                 severity=_safety_severity(candidate.section),
                 safety_issue=f"{candidate.section.replace('_', ' ').title()}: {issue_preview}",
                 exact_excerpt=excerpt,
                 therapy_terms=(candidate.therapy,),
-                contraindication=_contraindication_flag(candidate),
+                contraindication=False,
             )
         )
     return build_attested_safety_store(list(candidates), attestations)

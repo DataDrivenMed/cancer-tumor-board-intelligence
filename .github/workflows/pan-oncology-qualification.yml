@@ -30,7 +30,7 @@ jobs:
         run: python -m compileall -q agents services orchestration schemas app
 
       - name: Pan-oncology qualification gate
-        run: python -m pytest -q tests/test_pan_oncology*.py tests/test_explicit_stage_extraction.py
+        run: python -m pytest -q tests/test_pan_oncology*.py tests/test_explicit_stage_extraction.py tests/test_guideline_stage_prerequisites.py
 
       - name: Full regression suite
         run: python -m pytest -q

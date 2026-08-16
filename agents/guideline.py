@@ -47,7 +47,6 @@ def _text_match(case_value: object | None, allowed_terms: list[str]) -> bool:
 
 
 def _verified_molecular_text(case: CancerTumorBoardCase) -> str:
-    """Return only source-traced, human-confirmed molecular case concepts."""
     values: list[str] = []
     for finding in case.molecular_findings:
         if not finding.human_verified:
@@ -73,8 +72,6 @@ def _molecular_requirements_match(case: CancerTumorBoardCase, required_terms: li
     represented = _verified_molecular_text(case)
     if not represented:
         return False
-    # All stated prerequisites must be represented. A recommendation requiring
-    # both a gene and a specific alteration therefore cannot match on gene alone.
     return all(_norm(term) and _norm(term) in represented for term in required_terms)
 
 
@@ -115,13 +112,7 @@ def _label(source_type: GuidanceSourceType) -> str:
 
 
 class GuidelineAgent:
-    """Evidence-bounded guidance matcher.
-
-    The agent never invents guideline content. It only returns recommendations that
-    already exist in a verified evidence store and match the represented case.
-    Targeted recommendations may additionally require source-traced, human-confirmed
-    molecular prerequisites. Synthetic fixtures are disabled by default.
-    """
+    """Evidence-bounded guidance matcher with molecular prerequisites."""
 
     agent_id = AGENT_ID
     agent_version = AGENT_VERSION
@@ -230,6 +221,7 @@ class GuidelineAgent:
                 evidence_level=rec.evidence_level,
                 match_dimensions=dimensions,
                 required_molecular_terms=rec.required_molecular_terms,
+                therapy_terms=rec.therapy_terms,
                 conditions=rec.conditions,
                 exclusions=rec.exclusions,
                 epistemic_label=_label(source.source_type),

@@ -1,0 +1,40 @@
+name: Fix PDF Case ID
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-pdf-case-id.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch undefined case reference
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('app/pages/00_Clinical_Workspace.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'safe_case_id = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in str(case.case_id))'
+          new = 'report_case = result.get("case") or st.session_state.case\n        safe_case_id = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in str(report_case.case_id))'
+          if old not in text:
+              raise SystemExit('Target case_id line not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+
+          test_path = Path('tests/test_workspace_pdf_case_reference.py')
+          test_path.write_text('''from pathlib import Path\n\n\ndef test_pdf_download_uses_defined_report_case():\n    text = Path("app/pages/00_Clinical_Workspace.py").read_text(encoding="utf-8")\n    assert 'report_case = result.get("case") or st.session_state.case' in text\n    assert 'str(report_case.case_id)' in text\n    assert 'str(case.case_id)' not in text\n''', encoding='utf-8')
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/pages/00_Clinical_Workspace.py tests/test_workspace_pdf_case_reference.py
+          git commit -m "Fix PDF download case reference"
+          git push origin HEAD:main

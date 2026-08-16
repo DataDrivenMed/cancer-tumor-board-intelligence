@@ -11,6 +11,7 @@ Set these in the deployment secret store, not in source control.
 ```text
 MODEL_AUTH_TOKEN=<provider token>
 MODEL_NAME=openai/gpt-oss-120b:fireworks-ai
+MODEL_REASONING_EFFORT=high
 MODEL_BASE_URL=<optional provider-compatible base URL>
 ```
 
@@ -36,6 +37,32 @@ ENABLE_LIVE_CLINICALTRIALS=true
 
 The official ClinicalTrials.gov API v2 does not require a secret API key for the current client. Trial matching remains distinct from eligibility. The product applies deterministic disease, recruitment-status, and explicit age-bound screening, but never asserts patient eligibility.
 
+### CIViC molecular evidence
+
+CIViC is the primary public molecular-actionability source selected for product v1. CIViC content is open and its API supports anonymous reads. A CIViC API key is optional and is useful for sustained automated access beyond the default anonymous rate limit.
+
+```text
+CIVIC_API_KEY=<optional CIViC API key>
+```
+
+`services/civic_molecular_adapter.py` retrieves only `ACCEPTED` CIViC Evidence Items through the official GraphQL API. Retrieved records are source-verified candidates, but **are not automatically marked as locally human-verified**. They therefore cannot pass the Molecular Agent's clinical-actionability gate until an explicit local attestation is applied.
+
+This distinction is intentional: external expert curation is valuable evidence, but retrieval alone is not equivalent to local admission into the product's governed evidence store.
+
+OncoKB is an optional future secondary molecular source. It is not required for v1. If added, the deployment must first obtain the appropriate OncoKB license and API token for the intended research or clinical use; OncoKB content must not be scraped or redistributed.
+
+### FDA safety-label evidence
+
+FDA Structured Product Labeling / openFDA is the primary public safety-label source selected for product v1.
+
+```text
+OPENFDA_API_KEY=<recommended free openFDA API key>
+```
+
+`services/fda_label_adapter.py` retrieves bounded label sections such as boxed warnings, contraindications, warnings/cautions, interactions, adverse reactions, and dosing/administration text. Retrieval produces source candidates only. A locally attested `SafetyEvidenceRecord` can be created only when the reviewer supplies an exact excerpt that is literally present in the selected label section.
+
+FDA retrieval does not itself create a patient-specific contraindication, monitoring recommendation, or dose decision.
+
 ## 3. Governed clinical evidence packages
 
 The following channels can be supplied as either an inline JSON secret or a path to a JSON file mounted by the deployment environment.
@@ -56,7 +83,11 @@ TRANSLATIONAL_EVIDENCE_PATH=/secure/path/translational.json
 
 The `*_JSON` value takes precedence over the corresponding `*_PATH` value. Invalid packages fail closed and are not admitted into the production evidence store.
 
-### Guideline contract
+### Guideline contract and NCCN
+
+For the initial AML deployment, institution-authorized NCCN guidance is the preferred governed formal-guideline source when the institution's access and reuse terms permit this use.
+
+**Never commit NCCN PDFs, extracted text, recommendation tables, credentials, or other licensed content to this public repository.** A current institution-authorized NCCN AML source should be processed outside the public repository into a secure deployment-time package.
 
 A guideline package contains:
 
@@ -75,9 +106,24 @@ NCI PDQ is intentionally classified as an `authoritative_evidence_summary`, not 
 
 Molecular records must validate against `MolecularEvidenceRecord`. Production-mode molecular interpretation requires independently verified, human-verified, non-synthetic evidence. Gene identity alone is not treated as clinical actionability.
 
+For public molecular evidence, the preferred commissioning path is:
+
+1. retrieve accepted CIViC evidence with `CIViCMolecularClient`;
+2. review the disease, molecular profile, evidence level, direction, therapy, and exact CIViC evidence statement;
+3. explicitly attest only the approved evidence IDs with `attest_civic_records`;
+4. serialize the resulting `MolecularEvidenceStore` to a secure `MOLECULAR_EVIDENCE_PATH` or `MOLECULAR_EVIDENCE_JSON` value.
+
 ### Safety contract
 
 Safety records must validate against `SafetyEvidenceRecord`. Production-mode safety claims require independently verified, human-verified, non-synthetic source records.
+
+For FDA safety evidence, the preferred commissioning path is:
+
+1. retrieve current label-section candidates with `FDALabelClient`;
+2. review the product/SPL identity and the exact label section;
+3. create `SafetyRecordAttestation` objects containing only exact source spans and explicit structured safety metadata;
+4. build the store with `build_attested_safety_store`;
+5. serialize the result to `SAFETY_EVIDENCE_PATH` or `SAFETY_EVIDENCE_JSON`.
 
 ### Translational contract
 
@@ -87,17 +133,24 @@ Translational records remain non-decisional for management synthesis. Preclinica
 
 For Streamlit Community Cloud, put secret values in the app's Secrets configuration. Do not commit `.streamlit/secrets.toml`.
 
-Example secret names:
+Recommended initial secret names:
 
 ```toml
 MODEL_AUTH_TOKEN = "..."
 MODEL_NAME = "openai/gpt-oss-120b:fireworks-ai"
+MODEL_REASONING_EFFORT = "high"
+
 ENABLE_LIVE_PUBMED = "true"
 PUBMED_EMAIL = "name@example.org"
+NCBI_API_KEY = "" # optional
+
 ENABLE_LIVE_CLINICALTRIALS = "true"
+
+CIVIC_API_KEY = "" # optional for anonymous/low-volume reads
+OPENFDA_API_KEY = "..." # recommended
 ```
 
-Large governed evidence packages are better mounted or loaded through a secure deployment mechanism rather than copied into a public repository.
+Large governed evidence packages and licensed NCCN-derived packages are better mounted or loaded through a secure deployment mechanism rather than copied into a public repository.
 
 ## 5. Safety boundaries
 

@@ -6,7 +6,6 @@ from app.faculty_ui import render_overview
 
 st.set_page_config(
     page_title="Pan-Oncology Tumor Board Intelligence",
-    page_icon="TB",
     layout="wide",
     initial_sidebar_state="collapsed",
 )

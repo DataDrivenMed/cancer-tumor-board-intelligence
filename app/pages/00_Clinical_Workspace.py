@@ -30,11 +30,15 @@ from services.oncology_programs import PROGRAM_BY_ID
 from services.pathway_validation import get_pathway_validation_status
 from services.tumor_board_pdf import build_tumor_board_pdf
 from services.runtime_agents import configure_workflow_runtime
+from app.faculty_ui import (
+    faculty_css, render_case_context, render_case_chat, render_feedback,
+    render_molecular_table, render_thirty_second_view, render_treatment_timeline,
+    research_footer, top_navigation,
+)
 
 
 st.set_page_config(
     page_title="Tumor Board Intelligence",
-    page_icon="🧬",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -132,7 +136,7 @@ def sync_runtime_env() -> None:
 
 
 def topbar() -> None:
-    st.markdown('<div class="ws-top"><div class="ws-brand"><div class="ws-mark">TB</div><div><div class="ws-name">Tumor Board Intelligence</div><div class="ws-sub">Evidence-grounded clinical decision-support workspace</div></div></div><div class="ws-ready">Research decision support · de-identified or synthetic data only</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="ws-top"><div class="ws-brand"><div class="ws-mark">TB</div><div><div class="ws-name">Pan-Oncology Tumor Board Intelligence</div><div class="ws-sub">Ram Paragi · rparag@lsuhsc.edu</div></div></div><div class="ws-ready">Faculty evaluation · research decision support</div></div>', unsafe_allow_html=True)
 
 
 def nav(stage: str) -> None:
@@ -203,7 +207,7 @@ def reset() -> None:
     for key in [
         "stage", "case", "raw_extraction", "result", "extraction_package", "runtime_status",
         "evidence_candidates", "evidence_candidate_error", "molecular_store_override",
-        "safety_store_override", "guideline_store_override",
+        "safety_store_override", "guideline_store_override", "brief_tb_chat", "evidence_tb_chat", "analysis_tb_chat",
     ]: st.session_state.pop(key, None)
     st.rerun()
 
@@ -224,7 +228,10 @@ st.session_state.runtime_status = configure_workflow_runtime(
     safety_store_override=st.session_state.safety_store_override,
 )
 
-topbar(); nav(st.session_state.stage)
+faculty_css()
+topbar(); top_navigation("workspace"); nav(st.session_state.stage)
+if st.session_state.case is not None and st.session_state.stage != "intake":
+    render_case_context(st.session_state.case)
 
 if st.session_state.stage == "intake":
     hero("Case intake", "Build a decision-ready tumor board case.", "Start from a provenance-bearing synthetic case, a de-identified narrative, or an uploaded document. Structured review always precedes evidence review and analysis.")
@@ -323,6 +330,17 @@ elif st.session_state.stage == "evidence":
         st.stop()
 
     candidates = st.session_state.evidence_candidates
+    evidence_chat_outputs = {"guideline": guideline_report}
+    if candidates.molecular_records:
+        evidence_chat_outputs["molecular"] = {"status": "candidate_evidence_retrieved", "summary": f"{len(candidates.molecular_records)} bounded molecular candidate record(s) retrieved. These remain candidates until locally attested."}
+    if candidates.safety_records:
+        evidence_chat_outputs["safety"] = {"status": "candidate_evidence_retrieved", "summary": f"{len(candidates.safety_records)} bounded safety-label record(s) retrieved. These remain source candidates until locally attested."}
+    eq, chat = st.columns([1.55, .85], gap="large")
+    with eq:
+        st.markdown('<div class="fx-panel-title">Evidence channel readiness</div><div class="fx-panel-sub">Guidelines, molecular, and safety are commissioned here. Literature, trials, and translational channels run during analysis and remain independently labeled.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="fx-status-grid"><div class="fx-status"><strong>Guidelines</strong><span>{escape(human(guideline_report.status))}</span></div><div class="fx-status"><strong>Molecular</strong><span>{len(candidates.molecular_records)} candidate record(s)</span></div><div class="fx-status"><strong>Safety</strong><span>{len(candidates.safety_records)} candidate record(s)</span></div></div>', unsafe_allow_html=True)
+    with chat:
+        render_case_chat({"specialist_outputs": evidence_chat_outputs}, case, key_prefix="evidence")
     for warning in candidates.warnings: st.warning(warning)
     if candidates.candidate_therapies:
         st.caption("Guideline-candidate therapy concepts sent to safety-source retrieval: " + ", ".join(candidates.candidate_therapies))
@@ -370,31 +388,51 @@ elif st.session_state.stage == "evidence":
                 st.session_state.stage="analysis"; st.rerun()
 
 elif st.session_state.stage == "analysis":
-    hero("Analysis", "Assembling and challenging the evidence stack.", "Case integrity, information completeness, specialist evidence channels, challenge review, consensus gates, and the final presentation layer remain distinct.")
-    with st.spinner("Running deterministic gates and configured evidence channels..."):
-        try:
-            configure_workflow_runtime(
-                guideline_store_override=st.session_state.guideline_store_override,
-                molecular_store_override=st.session_state.molecular_store_override,
-                safety_store_override=st.session_state.safety_store_override,
-            )
-            st.session_state.result = run_workflow(st.session_state.case, raw_extraction=st.session_state.raw_extraction)
+    hero("Analysis", "Assembling and challenging the evidence stack.", "Case integrity, information completeness, specialist evidence channels, Challenge Review, consensus gates, and the presentation layer remain distinct.")
+    if st.session_state.result is None:
+        with st.spinner("Running deterministic gates and configured evidence channels..."):
+            try:
+                configure_workflow_runtime(
+                    guideline_store_override=st.session_state.guideline_store_override,
+                    molecular_store_override=st.session_state.molecular_store_override,
+                    safety_store_override=st.session_state.safety_store_override,
+                )
+                st.session_state.result = run_workflow(st.session_state.case, raw_extraction=st.session_state.raw_extraction)
+            except Exception as exc:
+                st.error(f"The workflow stopped safely because analysis could not complete: {exc}")
+                if st.button("Return to evidence review"): st.session_state.stage="evidence"; st.rerun()
+                st.stop()
+    analysis_result = st.session_state.result or {}
+    a1, a2 = st.columns([1.55, .85], gap="large")
+    with a1:
+        st.markdown('<div class="fx-panel-title">Analysis complete</div><div class="fx-panel-sub">Specialist outputs have passed through the configured integrity, missingness, challenge, and consensus path. Review the governed case-grounded query panel before opening the final brief.</div>', unsafe_allow_html=True)
+        outputs = analysis_result.get("specialist_outputs", {}) or {}
+        ready_count = sum(1 for v in outputs.values() if v is not None)
+        st.markdown(f'<div class="fx-status-grid"><div class="fx-status"><strong>Specialist channels</strong><span>{ready_count} output channel(s)</span></div><div class="fx-status"><strong>Challenge Review</strong><span>{escape(human(val(analysis_result.get("red_team_report"), "status", "not available")))}</span></div><div class="fx-status"><strong>Consensus</strong><span>{escape(human(val(analysis_result.get("consensus_report"), "status", "not available")))}</span></div></div>', unsafe_allow_html=True)
+        if st.button("Open decision brief", type="primary", use_container_width=True):
             st.session_state.stage = "brief"; st.rerun()
-        except Exception as exc:
-            st.error(f"The workflow stopped safely because analysis could not complete: {exc}")
-            if st.button("Return to evidence review"): st.session_state.stage="evidence"; st.rerun()
+    with a2:
+        render_case_chat(analysis_result, st.session_state.case, key_prefix="analysis")
 
 else:
     result = st.session_state.result or {}
     final = result.get("final_decision"); consensus = result.get("consensus_report"); integrity = result.get("case_integrity_report"); missing = result.get("missing_information_report"); red = result.get("red_team_report")
     decision = val(final,"decision_state",val(consensus,"decision_state","abstain"))
     hero("Decision brief", "A structured view of the decision state and supporting evidence.", "Evidence availability, challenge findings, consensus, uncertainty, and abstention are made visible rather than compressed into a single answer.")
+    case = result.get("case") or st.session_state.case
+    render_thirty_second_view(result, case)
+    lead, chat = st.columns([1.55, .85], gap="large")
+    with lead:
+        st.markdown(f'<div class="fx-decision-banner"><div class="fx-lbl">Decision state</div><h2>{escape(human(decision))}</h2><p>{escape(txt(val(consensus,"summary",val(final,"abstention_reason","Decision-support state generated from current evidence."))))}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="fx-missing"><strong>What is missing?</strong><p>{escape(txt(val(missing,"summary","No missing-information summary is available.")))}</p></div>', unsafe_allow_html=True)
+    with chat:
+        render_case_chat(result, case, key_prefix="brief")
     l,r = st.columns([.92,1.58], gap="large")
     with l:
         st.markdown(f'<div class="decision"><div class="decision-label">Decision state</div><div class="decision-title">{escape(human(decision))}</div>{chip(val(consensus,"status",decision))}<div class="ws-copy" style="margin-top:8px">{escape(txt(val(consensus,"summary",val(final,"abstention_reason","Decision-support state generated from current evidence."))))}</div></div>', unsafe_allow_html=True)
         st.markdown(f'<div class="ws-card"><div class="ws-title">Case quality</div><div style="margin-top:6px">{chip(val(integrity,"disposition","not available"))}</div><div class="ws-copy">Critical findings: {escape(txt(val(integrity,"critical_count",0)))}</div></div>', unsafe_allow_html=True)
         st.markdown(f'<div class="ws-card"><div class="ws-title">Information completeness</div><div style="margin-top:6px">{chip(val(missing,"disposition","not available"))}</div><div class="ws-copy">{escape(txt(val(missing,"summary","No summary available")))}</div></div>', unsafe_allow_html=True)
-        if red: st.markdown(f'<div class="ws-card"><div class="ws-title">Challenge review</div><div style="margin-top:6px">{chip(val(red,"status",val(red,"disposition")))}</div><div class="ws-copy">Blocking findings: {escape(txt(val(red,"blocking_count",0)))}</div></div>', unsafe_allow_html=True)
+        if red: st.markdown(f'<div class="fx-challenge"><div class="fx-panel-title">Challenge Review</div><p>Independent adversarial review · Blocking findings: {escape(txt(val(red,"blocking_count",0)))}</p><div style="margin-top:7px">{chip(val(red,"status",val(red,"disposition")))}</div></div>', unsafe_allow_html=True)
     with r:
         st.markdown('<div class="ws-section">Evidence availability</div><div class="ws-section-sub">Channel status is shown independently from clinical recommendation status.</div>', unsafe_allow_html=True)
         outputs = result.get("specialist_outputs", {}) or {}
@@ -402,7 +440,9 @@ else:
         for key,label in labels:
             obj = outputs.get(key); status = val(obj,"status","not selected") if obj else "not selected"; summary = val(obj,"summary","This evidence channel did not produce an output for the current route.") if obj else "This evidence channel did not produce an output for the current route."
             st.markdown(f'<div class="ws-card"><div style="display:flex;justify-content:space-between;gap:12px"><div><div class="ws-title">{label}</div><div class="ws-copy">{escape(txt(summary))}</div></div><div>{chip(status)}</div></div></div>', unsafe_allow_html=True)
-    tabs=st.tabs(["Decision brief","Challenge review","Evidence","Case QA","Audit"])
+    render_treatment_timeline(case)
+    render_molecular_table(case)
+    tabs=st.tabs(["Decision brief","Challenge Review","Evidence","Case QA","Audit"])
     with tabs[0]:
         brief=result.get("tumor_board_brief")
         if brief:
@@ -441,6 +481,12 @@ else:
         with st.expander("Evidence runtime configuration"): st.json(st.session_state.runtime_status)
         with st.expander("Audit events"):
             events=result.get("audit_events",[]) or []; st.json([e.model_dump(mode="json") if hasattr(e,"model_dump") else e for e in events])
+    brief_for_copy = result.get("tumor_board_brief")
+    with st.expander("Concise board summary"):
+        st.caption("Use the copy control in the code block to copy this governed summary.")
+        st.code(txt(val(brief_for_copy, "summary", "No concise summary is available.")), language=None)
+    with st.expander("Faculty evaluation"):
+        render_feedback()
     st.markdown("<br>",unsafe_allow_html=True)
     x1,x2=st.columns([.8,1.2],gap="small")
     with x1:
@@ -466,3 +512,4 @@ else:
             use_container_width=True,
         )
     st.caption("Clinical trial matching does not establish eligibility. This research system is decision support, not an autonomous treatment directive, and has not been clinically validated for patient care.")
+    research_footer()

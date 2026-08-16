@@ -7,17 +7,17 @@
 - Registered tumor-board programs: 14
 - Matrix scenarios per program: 15
 - Matrix executions: 210
-- Dedicated pan-oncology test executions in CI: 255
-- Full repository regression tests in CI: 546
-- Qualification build: `22f26354dd5365cba25fc7aabf59dc054bc4c195`
+- Dedicated pan-oncology test executions in CI: 261
+- Full repository regression tests in CI: 555
+- Qualification build: `b62217a3bc65321193195d782a593e093139d406`
 - GitHub Actions workflow: `Pan-Oncology Qualification`
-- Workflow run: `31963999619`
+- Workflow run: `31964312857`
 - Result: PASS
 - Date: 2026-08-16
 
 ## What passed
 
-The dedicated pan-oncology qualification gate completed with **255 passed** tests. The same build then completed the full repository regression suite with **546 passed** tests.
+The corrected final pan-oncology qualification build completed with **261 passed** dedicated tests. The same build then completed the full repository regression suite with **555 passed** tests.
 
 The dedicated gate includes:
 
@@ -26,6 +26,9 @@ The dedicated gate includes:
 - pediatric cross-program routing tests
 - stage missing-information gate tests
 - explicit exact-source stage extraction tests
+- stage-dependent guidance prerequisite tests, including wrong-stage rejection
+
+During final qualification, a stage-matching defect was detected before release: generic token matching allowed `stage II` to match `stage III`. The matcher was corrected to use exact canonical stage-label comparison, and the complete qualification gate was rerun successfully on the build recorded above.
 
 ## Common-core matrix scenarios
 
@@ -61,6 +64,8 @@ This record supports the following software claims for the shared pan-oncology c
 - conflicting explicit stage is represented as a blocking information gap
 - pending explicit stage is surfaced without globally assuming stage is required for every oncology question
 - an absent stage is not invented
+- stage-dependent guidance requires a source-verified and clinician-confirmed explicit stage
+- stage-dependent guidance rejects a different represented stage
 - empty evidence stores fail closed
 - empty evidence stores do not create guideline, molecular-actionability, translational-actionability, literature, trial-match, or safety claims
 - unregistered disease-program metadata can be deterministically corrected from a registered represented diagnosis
@@ -86,4 +91,4 @@ Those claims require the disease-specific and clinical validation process in `do
 
 All 14 disease programs remain labeled `architecture_ready` rather than `clinically_validated_silent` or `clinical_release`.
 
-The reason is deliberate: the shared core has now passed formal automated common-core qualification, but disease-specific management correctness still requires independently governed evidence packages and disease-appropriate expert reference-standard validation.
+The reason is deliberate: the shared core has passed formal automated common-core qualification, but disease-specific management correctness still requires independently governed evidence packages and disease-appropriate expert reference-standard validation.

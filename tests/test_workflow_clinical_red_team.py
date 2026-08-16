@@ -49,4 +49,4 @@ def test_workflow_runs_clinical_red_team_after_specialists() -> None:
     assert result["red_team_report"] is not None
     assert result["red_team_report"].agent_id == "clinical_red_team"
     assert result["final_decision"].decision_state == "abstain"
-    assert any(event.event_type == "clinical_red_team_complete" for event in result["audit_events"])
+    assert any(event["event"] == "clinical_red_team_complete" for event in result["audit_events"])

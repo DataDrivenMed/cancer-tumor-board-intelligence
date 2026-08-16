@@ -22,11 +22,20 @@ from services.model_gateway import ModelGatewayError
 
 st.set_page_config(
     page_title="Tumor Board Intelligence",
-    page_icon="◉",
+    page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 apply_design_system()
+
+
+VIEWS = [
+    "Overview",
+    "1. Start case",
+    "2. Review case",
+    "3. Tumor Board Brief",
+    "Evidence & audit",
+]
 
 
 def get_secret(name: str, default: str | None = None) -> str | None:
@@ -48,6 +57,10 @@ def as_text(value: Any) -> str:
     if hasattr(value, "value"):
         value = value.value
     return str(value)
+
+
+def go_to(view: str) -> None:
+    st.session_state.nav_choice = view
 
 
 def add_human_correction(fact, old_value, new_value):
@@ -139,9 +152,8 @@ def render_brief(brief) -> None:
             cols = st.columns(min(3, len(items)))
             for index, item in enumerate(items):
                 with cols[index % len(cols)]:
-                    st.markdown('<div class="ctb-card white">', unsafe_allow_html=True)
-                    render_item(item)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    with st.container(border=True):
+                        render_item(item)
         else:
             for item in items:
                 with st.container(border=True):
@@ -161,6 +173,7 @@ for key, default in {
     "extraction_package": None,
     "parsed_document": None,
     "reviewed_case": None,
+    "nav_choice": "Overview",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -175,46 +188,44 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.divider()
-    st.markdown("**Clinician workflow**")
-    st.caption("1. Enter case\n\n2. Verify extraction\n\n3. Run analysis\n\n4. Review brief")
+    st.radio("Clinician workflow", VIEWS, key="nav_choice")
     st.divider()
-    st.page_link("app/pages/00_Architecture_Anatomy.py", label="System anatomy", icon="◉")
-    st.caption("Detailed architecture, evidence boundaries, and safety invariants.")
+    st.page_link("pages/00_Architecture_Anatomy.py", label="System anatomy")
+    st.caption("Architecture, evidence boundaries, safety invariants, and validation anatomy.")
     st.divider()
     st.caption("Public deployment: synthetic or fully de-identified material only. Do not enter PHI.")
 
 
-hero(
-    "Evidence-grounded intelligence for multidisciplinary tumor boards",
-    "One guided workflow turns tumor-board source material into a structured, provenance-aware case, challenges the evidence stack, and renders an auditable decision-support brief. The system is designed to abstain when the information or evidence is insufficient.",
-)
+view = st.session_state.nav_choice
+result = st.session_state.result
+package = st.session_state.extraction_package
 
-st.markdown(
-    badge("36/36 frozen whole-system qualification", "ok")
-    + badge("0 observed safety-stop violations", "ok")
-    + badge("Synthetic/de-identified only", "warn"),
-    unsafe_allow_html=True,
-)
 
-st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+if view == "Overview":
+    hero(
+        "Evidence-grounded intelligence for multidisciplinary tumor boards",
+        "A guided workflow turns tumor-board source material into a structured, provenance-aware case, challenges the evidence stack, and produces an auditable decision-support brief. The system is designed to stop or abstain when information or evidence is insufficient.",
+        eyebrow="Clinician workspace · Research v1.0",
+    )
 
-home, case_tab, review_tab, brief_tab, evidence_tab, audit_tab = st.tabs(
-    ["Overview", "1 · New Case", "2 · Case Review", "3 · Tumor Board Brief", "Evidence", "Audit"]
-)
+    st.markdown(
+        badge("36/36 frozen whole-system qualification", "ok")
+        + badge("0 observed safety-stop violations", "ok")
+        + badge("Synthetic/de-identified only", "warn"),
+        unsafe_allow_html=True,
+    )
 
-with home:
-    st.markdown("## Built for a clinician, not for an AI operator")
+    st.markdown("## One workflow, four actions")
     st.write(
-        "The underlying system contains multiple agents, evidence gates, verification services, an independent Clinical Red Team, and a Consensus Engine. "
-        "The clinician should not have to operate those components individually. The normal workflow is intentionally reduced to four actions."
+        "The multi-agent system runs behind the interface. A clinician does not select agents or operate validation components individually."
     )
 
     c1, c2, c3, c4 = st.columns(4)
     cards = [
-        ("01", "Enter the case", "Paste a synthetic/de-identified narrative, upload a document, or load the built-in synthetic example."),
-        ("02", "Verify what was understood", "Review diagnosis, disease state, performance status, molecular findings, treatment history, missing information, and provenance."),
-        ("03", "Run the intelligence stack", "Routing, specialists, verification, Red Team, and consensus run behind the interface under their own safety contracts."),
-        ("04", "Review the board brief", "Read the management discussion, alternatives, uncertainty, safety findings, trials, evidence sources, and what could change the recommendation."),
+        ("01", "Enter the case", "Paste a de-identified narrative, upload a document, or use the built-in synthetic example."),
+        ("02", "Verify the case", "Confirm decision-critical facts and source provenance before downstream analysis."),
+        ("03", "Run analysis", "Routing, specialist evidence channels, verification, Red Team, and consensus execute behind the scenes."),
+        ("04", "Review the brief", "Read the board-ready management discussion, evidence, uncertainty, safety, trials, and challenges."),
     ]
     for col, (num, title, copy) in zip([c1, c2, c3, c4], cards):
         with col:
@@ -223,43 +234,48 @@ with home:
                 unsafe_allow_html=True,
             )
 
-    st.markdown("## The intelligence pathway")
+    st.markdown("## What happens behind the interface")
     st.markdown(
         """
         <div class="ctb-strip">
-          <span class="ctb-chip">Case input</span><span class="ctb-chip">Structured extraction</span>
+          <span class="ctb-chip">Case input</span><span class="ctb-chip">Extraction</span>
           <span class="ctb-chip">Provenance</span><span class="ctb-chip">Integrity gates</span>
-          <span class="ctb-chip">Missing information</span><span class="ctb-chip">Clinical routing</span>
+          <span class="ctb-chip">Missing information</span><span class="ctb-chip">Routing</span>
           <span class="ctb-chip">Specialist evidence</span><span class="ctb-chip">Verification</span>
           <span class="ctb-chip">Clinical Red Team</span><span class="ctb-chip">Consensus</span>
-          <span class="ctb-chip">Tumor Board Brief</span><span class="ctb-chip">Human review</span>
+          <span class="ctb-chip">Tumor Board Brief</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    left, right = st.columns([1.25, .75])
+
+    left, right = st.columns([1.35, .65])
     with left:
-        st.markdown("### Why this architecture is different")
+        st.markdown("### Safety by separation of responsibilities")
         st.write(
-            "A gene match does not automatically become a variant match. A molecular signal does not automatically become clinical actionability. "
-            "A possible clinical-trial match does not establish eligibility. A retrieved paper does not become a verified recommendation. "
-            "The system keeps those distinctions explicit all the way to the final brief."
+            "Patient facts, evidence retrieval, evidence verification, molecular interpretation, trial matching, safety analysis, adversarial challenge, and consensus are separate bounded functions. A retrieved paper is not automatically a recommendation; a molecular signal is not automatically actionability; a possible trial match is not patient eligibility."
         )
-        st.page_link("app/pages/00_Architecture_Anatomy.py", label="Explore the detailed architecture anatomy →")
+        st.page_link("pages/00_Architecture_Anatomy.py", label="Open the detailed system anatomy")
     with right:
         st.markdown(
-            '<div class="ctb-card accent"><div class="ctb-kicker">Current validation boundary</div><div class="ctb-number">36/36</div><h3>Strict synthetic whole-system executions</h3><p>Zero observed safety-stop violations in the frozen controlled benchmark. This is software qualification, not clinical validation.</p></div>',
+            '<div class="ctb-card accent"><div class="ctb-kicker">Validation boundary</div><div class="ctb-number">36/36</div><h3>Strict synthetic executions</h3><p>Zero observed safety-stop violations in the frozen controlled whole-system benchmark. This is software qualification, not clinical validation.</p></div>',
             unsafe_allow_html=True,
         )
 
-    st.markdown("### Before you use the workflow")
     st.warning(
         "This public research deployment is for synthetic or fully de-identified data only. It is not a production PHI environment and is not an autonomous treatment system."
     )
+    st.button("Start a case", type="primary", on_click=go_to, args=("1. Start case",))
 
-with case_tab:
-    st.markdown("## Start a tumor-board case")
-    st.caption("Choose the fastest appropriate input path. The public research deployment accepts synthetic or fully de-identified material only.")
+
+elif view == "1. Start case":
+    hero(
+        "Start a tumor-board case",
+        "Choose one input method. The system will either load the built-in synthetic case or structure a narrative/document under the frozen v2.5 extraction contract.",
+        eyebrow="Step 1 of 4",
+    )
+
+    st.info("Public research deployment: use synthetic or fully de-identified material only. Do not enter PHI.")
 
     mode = st.segmented_control(
         "Input method",
@@ -278,7 +294,7 @@ with case_tab:
         c2.metric("Disease state", "Relapsed")
         c3.metric("Molecular", "FLT3-ITD")
         c4.metric("ECOG", "1")
-        st.caption("Use this path to explore the interface without invoking extraction inference.")
+        st.caption("Best path for exploring the clinician interface without invoking extraction inference.")
         if st.button("Run synthetic example", type="primary", key="run_structured"):
             direct_case = CancerTumorBoardCase.model_validate(sample_data)
 
@@ -325,7 +341,7 @@ with case_tab:
             os.environ["MODEL_BASE_URL"] = model_base_url
 
         if not model_token and not model_base_url:
-            st.info("The extraction model endpoint is not configured for this deployment. The structured synthetic example remains available.")
+            st.info("The extraction endpoint is not configured for this deployment. The structured synthetic example remains available.")
         else:
             st.caption(f"Extraction model: {model_name} · reasoning effort: {reasoning_effort} · extraction contract: v2.5")
             if st.button("Extract and verify case", type="primary", key="extract_case"):
@@ -340,25 +356,39 @@ with case_tab:
                     st.session_state.extraction_package = package
                     st.session_state.reviewed_case = None
                     st.session_state.result = None
-                    st.success("Extraction complete. Continue to Case Review.")
+                    st.success("Extraction complete. The case is ready for clinician review.")
                 except ModelGatewayError as exc:
                     st.error(str(exc))
                 except Exception as exc:
                     st.error(f"Extraction failed safely: {exc}")
 
     if direct_case is not None:
+        st.session_state.extraction_package = None
         st.session_state.reviewed_case = direct_case
         st.session_state.result = run_workflow(direct_case)
-        st.success("Synthetic workflow complete. Open Tumor Board Brief to review the result.")
+        st.success("Synthetic workflow completed successfully.")
 
-with review_tab:
-    st.markdown("## Verify what the system understood")
+    if st.session_state.extraction_package is not None:
+        st.button("Continue to case review", type="primary", on_click=go_to, args=("2. Review case",))
+    elif st.session_state.result is not None:
+        st.button("Open Tumor Board Brief", type="primary", on_click=go_to, args=("3. Tumor Board Brief",))
+
+
+elif view == "2. Review case":
+    hero(
+        "Verify what the system understood",
+        "Human review occurs before the case is allowed to proceed through the downstream intelligence stack. Confirm decision-critical facts, molecular findings, treatment history, and provenance.",
+        eyebrow="Step 2 of 4",
+    )
+
     package = st.session_state.extraction_package
     if package is None:
         if st.session_state.reviewed_case is not None:
-            st.info("The current case was loaded from a structured synthetic example and did not require narrative extraction review.")
+            st.info("The current case was loaded from the structured synthetic example, so narrative extraction review was not required.")
+            st.button("Open Tumor Board Brief", type="primary", on_click=go_to, args=("3. Tumor Board Brief",))
         else:
-            st.info("Start a narrative or document case in New Case first.")
+            st.info("No extracted case is waiting for review. Start a case first.")
+            st.button("Start a case", type="primary", on_click=go_to, args=("1. Start case",))
     else:
         total = package.provenance_total
         verified = package.provenance_verified
@@ -389,18 +419,28 @@ with review_tab:
             st.markdown("### Molecular findings")
             molecular_checks = []
             for idx, item in enumerate(case.molecular_findings):
-                molecular_checks.append(st.checkbox(f"Verified: {item.gene} {item.alteration_type or ''}".strip(), key=f"mol_verify_{idx}"))
+                molecular_checks.append(
+                    st.checkbox(
+                        f"I verified: {item.gene} {item.alteration_type or ''}".strip(),
+                        key=f"mol_verify_{idx}",
+                    )
+                )
             if not case.molecular_findings:
                 st.caption("No molecular findings were extracted. This is not equivalent to a negative molecular result.")
 
             st.markdown("### Treatment history")
             treatment_checks = []
             for idx, item in enumerate(case.treatments):
-                treatment_checks.append(st.checkbox(f"Verified episode: {item.regimen}", key=f"tx_verify_{idx}"))
+                treatment_checks.append(
+                    st.checkbox(
+                        f"I verified treatment episode: {item.regimen}",
+                        key=f"tx_verify_{idx}",
+                    )
+                )
             if not case.treatments:
                 st.caption("No treatment episodes were extracted.")
 
-            confirm = st.form_submit_button("Confirm reviewed case and run analysis", type="primary")
+            confirm = st.form_submit_button("Confirm case and run analysis", type="primary")
 
         if confirm:
             add_human_correction(case.diagnosis, case.diagnosis.value, diagnosis_value)
@@ -414,26 +454,41 @@ with review_tab:
                 case.treatments[idx].human_verified = checked
             st.session_state.reviewed_case = case
             st.session_state.result = run_workflow(case, raw_extraction=package.raw_extraction)
-            st.success("Analysis complete. Open Tumor Board Brief.")
+            st.success("Analysis complete. The board brief is ready.")
 
         with st.expander("Inspect structured extraction and provenance"):
             st.json(package.raw_extraction)
 
-result = st.session_state.result
+        if st.session_state.result is not None:
+            st.button("Open Tumor Board Brief", type="primary", on_click=go_to, args=("3. Tumor Board Brief",))
 
-with brief_tab:
-    st.markdown("## Tumor Board Intelligence Brief")
-    st.caption("The presentation layer cannot create a management recommendation that was not authorized by the upstream consensus contract.")
+
+elif view == "3. Tumor Board Brief":
+    hero(
+        "Tumor Board Intelligence Brief",
+        "The clinician-facing synthesis. Management candidates are rendered only when the upstream consensus contract permits them; uncertainty, missing information, Red Team challenges, and evidence boundaries remain visible.",
+        eyebrow="Steps 3 and 4 · Analyze and review",
+    )
+
     if not result:
-        st.info("Run a case first.")
+        st.info("No completed case analysis is available yet.")
+        st.button("Start a case", type="primary", on_click=go_to, args=("1. Start case",))
     else:
         render_brief(result.get("tumor_board_brief"))
+        st.divider()
+        st.button("Inspect evidence and audit trail", on_click=go_to, args=("Evidence & audit",))
 
-with evidence_tab:
-    st.markdown("## Evidence and agent outputs")
-    st.caption("Progressive disclosure: clinicians can inspect the machinery when they need to understand why a result appeared.")
+
+elif view == "Evidence & audit":
+    hero(
+        "Evidence and audit trail",
+        "A single expert view for provenance, specialist outputs, Red Team findings, consensus, and workflow events. This is progressive disclosure for clinicians, reviewers, researchers, and validation teams.",
+        eyebrow="Expert review",
+    )
+
     if not result:
         st.info("Run a case first.")
+        st.button("Start a case", type="primary", on_click=go_to, args=("1. Start case",))
     else:
         routing = result.get("routing")
         if routing:
@@ -441,25 +496,16 @@ with evidence_tab:
             c1.metric("Question class", routing.question_type.replace("_", " ").title())
             c2.metric("Complexity", routing.complexity.replace("_", " ").title())
             c3.metric("Selected agents", len(routing.selected_agents))
-            st.markdown("<div class='ctb-strip'>" + "".join(f"<span class='ctb-chip'>{a.replace('_',' ').title()}</span>" for a in routing.selected_agents) + "</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='ctb-strip'>"
+                + "".join(f"<span class='ctb-chip'>{a.replace('_',' ').title()}</span>" for a in routing.selected_agents)
+                + "</div>",
+                unsafe_allow_html=True,
+            )
 
-        for agent_id, output in result.get("specialist_outputs", {}).items():
-            status = as_text(val(output, "status", "unknown"))
-            with st.expander(f"{agent_id.replace('_', ' ').title()} · {status.upper()}"):
-                summary = val(output, "summary", None)
-                if summary:
-                    st.write(summary)
-                warnings = list(val(output, "warnings", []) or [])
-                for warning in warnings:
-                    st.warning(warning)
-                if hasattr(output, "model_dump"):
-                    st.json(output.model_dump(mode="json"))
-                elif isinstance(output, dict):
-                    st.json(output)
-
+        st.markdown("## Independent challenge and consensus")
         red = result.get("red_team_report")
         consensus = result.get("consensus_report")
-        st.markdown("### Independent challenge and consensus")
         if red:
             c1, c2 = st.columns(2)
             c1.metric("Red Team", as_text(red.disposition).upper())
@@ -471,38 +517,48 @@ with evidence_tab:
                 else:
                     st.warning(f"{level} · {finding.code}: {finding.issue}")
         if consensus:
-            st.write(f"**Consensus:** {consensus.decision_state.replace('_', ' ').upper()} · support strength {consensus.decision_support_strength.upper()}")
+            st.write(
+                f"**Consensus:** {consensus.decision_state.replace('_', ' ').upper()} · support strength {consensus.decision_support_strength.upper()}"
+            )
             st.caption(consensus.summary)
 
-with audit_tab:
-    st.markdown("## Audit and provenance")
-    st.caption("This view is intended for expert review, validation, research, and troubleshooting. It does not expose private chain-of-thought.")
-    if not result:
-        st.info("Run a case first.")
-    else:
-        st.markdown("### Workflow event log")
+        st.markdown("## Specialist evidence channels")
+        for agent_id, output in result.get("specialist_outputs", {}).items():
+            status = as_text(val(output, "status", "unknown"))
+            with st.expander(f"{agent_id.replace('_', ' ').title()} · {status.upper()}"):
+                summary = val(output, "summary", None)
+                if summary:
+                    st.write(summary)
+                for warning in list(val(output, "warnings", []) or []):
+                    st.warning(warning)
+                if hasattr(output, "model_dump"):
+                    st.json(output.model_dump(mode="json"))
+                elif isinstance(output, dict):
+                    st.json(output)
+
+        st.markdown("## Workflow audit")
         events = result.get("audit_events", [])
         if events:
             st.dataframe(events, use_container_width=True, hide_index=True)
-        st.markdown("### Structured reports")
-        with st.expander("Clinical Red Team"):
-            red = result.get("red_team_report")
+
+        with st.expander("Structured Red Team report"):
             st.json(red.model_dump(mode="json") if red and hasattr(red, "model_dump") else red or {})
-        with st.expander("Consensus"):
-            consensus = result.get("consensus_report")
+        with st.expander("Structured Consensus report"):
             st.json(consensus.model_dump(mode="json") if consensus and hasattr(consensus, "model_dump") else consensus or {})
-        with st.expander("Final brief"):
+        with st.expander("Structured final brief"):
             brief = result.get("tumor_board_brief")
             st.json(brief.model_dump(mode="json") if brief and hasattr(brief, "model_dump") else brief or {})
+
         package = st.session_state.extraction_package
         if package is not None:
-            st.markdown("### Extraction v2.5 audit")
+            st.markdown("## Extraction v2.5 audit")
             c1, c2, c3 = st.columns(3)
             c1.metric("Provenance anchors", package.provenance_total)
             c2.metric("Exact verified", package.provenance_verified)
             c3.metric("Duplicate treatments removed", package.duplicate_treatments_removed)
             if package.provenance_failures:
                 st.error("Failed provenance items: " + ", ".join(package.provenance_failures))
+
 
 st.divider()
 st.caption(

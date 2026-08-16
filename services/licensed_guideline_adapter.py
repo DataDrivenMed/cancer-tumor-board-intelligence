@@ -13,6 +13,10 @@ from schemas.guideline import (
 )
 
 
+class SourceUseProhibitedError(ValueError):
+    """Raised when the supplied source text explicitly prohibits AI/tool use."""
+
+
 @dataclass(frozen=True)
 class LicensedGuidelineMetadata:
     source_id: str
@@ -49,6 +53,28 @@ def normalized_text_hash(text: str) -> str:
     return sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def _assert_source_allows_ai_processing(source_text: str) -> None:
+    """Fail closed when the source itself states that AI/tool use is prohibited.
+
+    Institutional access is not interpreted as permission to process a source with
+    an AI system. If separate written authorization is later obtained, the operator
+    should commission that source under a separately reviewed integration contract
+    rather than bypassing this control.
+    """
+    normalized = " ".join((source_text or "").lower().split())
+    prohibited_markers = (
+        "may not distribute this content or use it with any artificial intelligence model or tool",
+        "may not use it with any artificial intelligence model or tool",
+        "may not use this content with any artificial intelligence model or tool",
+        "prohibited from use with artificial intelligence",
+    )
+    if any(marker in normalized for marker in prohibited_markers):
+        raise SourceUseProhibitedError(
+            "The supplied guideline source explicitly prohibits use with artificial-intelligence models/tools. "
+            "It cannot be ingested by this application without a separately reviewed authorization path."
+        )
+
+
 def build_licensed_guideline_store(
     *,
     source_text: str,
@@ -57,14 +83,16 @@ def build_licensed_guideline_store(
 ) -> GuidelineEvidenceStore:
     """Build a verified deployment-time store from an institution-authorized source.
 
-    This helper is intended for licensed materials such as institution-authorized
-    clinical guidelines. The source document itself should remain outside the public
-    repository. Every recommendation must carry an exact source span that is present
-    in the supplied source text.
+    The source document itself should remain outside the public repository. Every
+    recommendation must carry an exact source span that is present in the supplied
+    source text. Sources that explicitly prohibit AI/tool use are rejected before
+    any content is transformed or admitted.
     """
     normalized_source = " ".join((source_text or "").split())
     if not normalized_source:
         raise ValueError("licensed guideline source_text is empty")
+
+    _assert_source_allows_ai_processing(source_text)
 
     source = GuidanceSource(
         source_id=metadata.source_id,

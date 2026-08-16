@@ -45,6 +45,10 @@ class GuidanceRecommendation(BaseModel):
     source_id: str
     disease_terms: list[str] = Field(default_factory=list)
     disease_states: list[str] = Field(default_factory=list)
+    # Optional explicit-stage prerequisite. A recommendation carrying stage terms may
+    # match only when the canonical case contains a source-verified, clinician-confirmed
+    # explicit stage fact. The product does not infer stage from TNM or imaging.
+    stage_terms: list[str] = Field(default_factory=list)
     question_domains: list[str] = Field(default_factory=list)
     required_molecular_terms: list[str] = Field(default_factory=list)
     # Explicit therapy concepts are structured separately from prose so downstream
@@ -81,6 +85,7 @@ class GuidanceMatch(BaseModel):
     strength: GuidanceStrength
     evidence_level: str | None = None
     match_dimensions: list[str] = Field(default_factory=list)
+    stage_terms: list[str] = Field(default_factory=list)
     required_molecular_terms: list[str] = Field(default_factory=list)
     therapy_terms: list[str] = Field(default_factory=list)
     conditions: list[str] = Field(default_factory=list)
@@ -98,7 +103,7 @@ class GuidanceMatch(BaseModel):
 
 class GuidelineReport(BaseModel):
     agent_id: str = "guideline"
-    agent_version: str = "1.1.0"
+    agent_version: str = "1.2.0"
     case_id: str
     status: Literal[
         "completed",

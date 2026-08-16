@@ -36,9 +36,16 @@ def _concept_matches(record, diagnosis: str, genes: list[str]) -> list[str]:
     diagnosis_norm = _norm(diagnosis)
     condition_blob = " | ".join(_norm(x) for x in record.conditions)
     title_blob = _norm(record.title)
-    if diagnosis_norm and (diagnosis_norm in condition_blob or diagnosis_norm in title_blob):
-        matched.append(f"diagnosis:{diagnosis}")
 
+    disease_match = bool(
+        diagnosis_norm and (diagnosis_norm in condition_blob or diagnosis_norm in title_blob)
+    )
+    # A molecular keyword alone must never make an unrelated-disease study a
+    # candidate match. Disease context is a mandatory prerequisite.
+    if not disease_match:
+        return []
+
+    matched.append(f"diagnosis:{diagnosis}")
     searchable = " | ".join(
         [title_blob, condition_blob]
         + [_norm(x) for x in record.interventions]
@@ -131,7 +138,7 @@ class ClinicalTrialsAgent:
                     eligibility_determined=False,
                     eligible=None,
                     match_strength="possible",
-                    rationale="Current ClinicalTrials.gov record has active recruitment status and overlaps one or more bounded structured case concepts. Eligibility has not been determined.",
+                    rationale="Current ClinicalTrials.gov record has active recruitment status and overlaps the represented disease context. Eligibility has not been determined.",
                     source_url=record.source_url,
                 )
             )
@@ -142,7 +149,7 @@ class ClinicalTrialsAgent:
                 status="no_evidence_found",
                 search_trace=trace,
                 records=records,
-                summary="Study records were retrieved, but none met the deterministic active-recruitment plus structured-concept match rule.",
+                summary="Study records were retrieved, but none met the deterministic active-recruitment plus disease-context match rule.",
                 limitations=["Retrieved records may still warrant manual review; no eligibility inference was made."],
             )
 

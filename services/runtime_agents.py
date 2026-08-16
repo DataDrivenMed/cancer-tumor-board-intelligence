@@ -93,6 +93,33 @@ def _governed_stores():
     )
 
 
+def resolve_product_guideline_store() -> tuple[GuidelineEvidenceStore, EvidenceConfigStatus]:
+    """Resolve the guideline store for the clinician product.
+
+    An explicitly configured governed deployment package always takes precedence.
+    If none is configured, the product falls back to its deliberately narrow bundled
+    open-access ELN AML consensus record. The core backend itself remains fail-closed
+    by default, which preserves existing backend and historical regression semantics.
+    """
+    from services import guideline_sources
+
+    configured_store, configured_status = guideline_sources._load_production_guideline_store()
+    if configured_status.loaded and configured_store.sources and configured_store.recommendations:
+        return configured_store, configured_status
+
+    from services.eln_aml_guidance import public_eln_aml_store
+
+    store = public_eln_aml_store()
+    return store, EvidenceConfigStatus(
+        channel="guideline",
+        configured=True,
+        loaded=True,
+        source_count=len(store.sources),
+        record_count=len(store.recommendations),
+        configuration_origin="bundled_public_eln_2022",
+    )
+
+
 def _override_status(channel: str, store: Any) -> EvidenceConfigStatus:
     records = list(getattr(store, "records", []) or [])
     sources = list(getattr(store, "sources", []) or [])

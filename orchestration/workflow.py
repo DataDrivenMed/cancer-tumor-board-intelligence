@@ -19,6 +19,7 @@ from agents.translational import TranslationalBiologyAgent
 from agents.clinical_trials import ClinicalTrialsAgent
 from agents.safety import SafetyAgent
 from agents.clinical_red_team import run_clinical_red_team
+from agents.consensus import run_consensus
 
 
 AGENT_REGISTRY = {
@@ -31,6 +32,32 @@ AGENT_REGISTRY = {
     "clinical_trials": ClinicalTrialsAgent(),
     "safety": SafetyAgent(PRODUCTION_SAFETY_STORE, production_mode=True),
 }
+
+
+def _abstain_result(
+    *,
+    case,
+    final,
+    audit,
+    semantic_findings,
+    red_team_findings,
+    integrity_report=None,
+    missing_report=None,
+):
+    return {
+        "case": case,
+        "routing": None,
+        "specialist_outputs": {},
+        "preliminary_synthesis": "",
+        "red_team_findings": red_team_findings,
+        "red_team_report": None,
+        "consensus_report": None,
+        "semantic_integrity_findings": semantic_findings,
+        "case_integrity_report": integrity_report,
+        "missing_information_report": missing_report,
+        "final_decision": final,
+        "audit_events": audit,
+    }
 
 
 def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = None) -> dict:
@@ -53,12 +80,12 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
             ],
         )
         audit.append(audit_event("workflow_abstained", "Semantic integrity gate failed"))
-        return {
-            "case": case,
-            "routing": None,
-            "specialist_outputs": {},
-            "preliminary_synthesis": "",
-            "red_team_findings": [
+        return _abstain_result(
+            case=case,
+            final=final,
+            audit=audit,
+            semantic_findings=semantic_findings,
+            red_team_findings=[
                 RedTeamFinding(
                     severity="critical",
                     category="semantic_integrity",
@@ -68,13 +95,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
                 for f in semantic_findings
                 if f.severity in {"error", "critical"}
             ],
-            "red_team_report": None,
-            "semantic_integrity_findings": semantic_findings,
-            "case_integrity_report": None,
-            "missing_information_report": None,
-            "final_decision": final,
-            "audit_events": audit,
-        }
+        )
 
     conflicts, missing = inspect_case(case)
     case.conflicts = conflicts
@@ -99,12 +120,13 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
             ],
         )
         audit.append(audit_event("workflow_abstained", "Case Integrity / Data QA gate blocked routing"))
-        return {
-            "case": case,
-            "routing": None,
-            "specialist_outputs": {},
-            "preliminary_synthesis": "",
-            "red_team_findings": [
+        return _abstain_result(
+            case=case,
+            final=final,
+            audit=audit,
+            semantic_findings=semantic_findings,
+            integrity_report=integrity_report,
+            red_team_findings=[
                 RedTeamFinding(
                     severity="critical" if f.recommendation_blocking else "major",
                     category=f"case_integrity:{f.category}",
@@ -114,13 +136,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
                 for f in integrity_report.findings
                 if f.recommendation_blocking
             ],
-            "red_team_report": None,
-            "semantic_integrity_findings": semantic_findings,
-            "case_integrity_report": integrity_report,
-            "missing_information_report": None,
-            "final_decision": final,
-            "audit_events": audit,
-        }
+        )
 
     missing_report = run_missing_information(case)
     audit.append(
@@ -143,12 +159,14 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
             ],
         )
         audit.append(audit_event("workflow_abstained", "Missing Information Agent blocked specialist routing"))
-        return {
-            "case": case,
-            "routing": None,
-            "specialist_outputs": {},
-            "preliminary_synthesis": "",
-            "red_team_findings": [
+        return _abstain_result(
+            case=case,
+            final=final,
+            audit=audit,
+            semantic_findings=semantic_findings,
+            integrity_report=integrity_report,
+            missing_report=missing_report,
+            red_team_findings=[
                 RedTeamFinding(
                     severity="critical" if item.priority.value == "critical" else "major",
                     category="missing_information",
@@ -158,13 +176,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
                 for item in missing_report.items
                 if item.recommendation_blocking
             ],
-            "red_team_report": None,
-            "semantic_integrity_findings": semantic_findings,
-            "case_integrity_report": integrity_report,
-            "missing_information_report": missing_report,
-            "final_decision": final,
-            "audit_events": audit,
-        }
+        )
 
     routing = route_case(case)
     audit.append(audit_event("routing_complete", ", ".join(routing.selected_agents)))
@@ -196,40 +208,41 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
         for finding in red_team_report.findings
     ]
 
-    preliminary = (
-        "Skeleton synthesis only. The application has routed the case through specialist contracts and an independent "
-        "deterministic Clinical Red Team. Guideline, literature, molecular, translational, clinical-trials, and safety "
-        "layers enforce explicit evidence boundaries. Trial matching never establishes patient eligibility, translational "
-        "evidence never independently establishes clinical actionability, and recommendation-blocking Red Team findings "
-        "must be resolved before consensus."
+    consensus_report = run_consensus(case, routing, specialist_outputs, red_team_report)
+    audit.append(
+        audit_event(
+            "consensus_complete",
+            f"disposition={consensus_report.disposition.value}; decision_state={consensus_report.decision_state}; "
+            f"candidates={len(consensus_report.candidates)}; safe_to_render={consensus_report.safe_to_render_decision_support}",
+        )
     )
 
-    if not red_team_report.safe_for_consensus:
-        abstention_reason = (
-            "Clinical Red Team identified recommendation-blocking evidence, safety, orchestration, or epistemic-integrity findings."
-        )
-        priorities = [
-            finding.effect_on_recommendation
-            for finding in red_team_report.findings
-            if finding.recommendation_blocking
-        ]
-    else:
-        abstention_reason = (
-            "The Clinical Red Team stage is complete, but the validated Consensus Engine has not yet been activated; "
-            "the current build therefore withholds a clinical recommendation."
-        )
-        priorities = [
-            "Preserve all Red Team challenges and specialist limitations in the future consensus state.",
-            "Do not convert agent agreement into truth or bounded no-result searches into negative evidence.",
-            "Activate recommendation logic only after the Consensus Engine is implemented and independently validated.",
-        ]
+    primary_strategy = None
+    alternatives = []
+    if consensus_report.safe_to_render_decision_support and consensus_report.candidates:
+        primary_strategy = consensus_report.candidates[0].strategy
+        alternatives = [candidate.strategy for candidate in consensus_report.candidates[1:]]
 
     final = FinalDecision(
-        decision_state="abstain",
-        decision_support_strength="insufficient",
-        abstention_reason=abstention_reason,
-        major_uncertainties=[item.field for item in missing_report.items if item.priority.value in {"high", "critical"}],
-        discussion_priorities=priorities,
+        decision_state=consensus_report.decision_state,
+        primary_strategy=primary_strategy,
+        alternatives=alternatives,
+        conditions=[
+            item
+            for candidate in consensus_report.candidates
+            for item in candidate.conditions
+        ],
+        major_uncertainties=consensus_report.major_uncertainties,
+        discussion_priorities=consensus_report.discussion_priorities,
+        decision_support_strength=consensus_report.decision_support_strength,
+        abstention_reason=consensus_report.abstention_reason,
+    )
+
+    preliminary = (
+        "Deterministic evidence integration complete. The Consensus Engine does not use agent voting. Explicit management "
+        "candidates require verified formal or consensus guideline support; molecular, translational, literature, trial, "
+        "and safety outputs remain bounded by their own claim gates. Clinical Red Team challenges remain visible and any "
+        "recommendation-blocking finding forces abstention."
     )
     audit.append(audit_event("workflow_complete", final.decision_state))
 
@@ -240,6 +253,7 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
         "preliminary_synthesis": preliminary,
         "red_team_findings": red_team,
         "red_team_report": red_team_report,
+        "consensus_report": consensus_report,
         "semantic_integrity_findings": semantic_findings,
         "case_integrity_report": integrity_report,
         "missing_information_report": missing_report,

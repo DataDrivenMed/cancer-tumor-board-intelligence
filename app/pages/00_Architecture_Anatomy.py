@@ -2,201 +2,170 @@ from __future__ import annotations
 
 import streamlit as st
 
-from app.ui import apply_design_system, architecture_stage, connector, hero, badge
+ARTICLE_URL = "https://datadrivenmed.github.io/resources/ai-agents/"
 
-
-st.set_page_config(page_title="Architecture Anatomy | Tumor Board Intelligence", page_icon="🧭", layout="wide")
-apply_design_system()
-
-with st.sidebar:
-    st.markdown("### System anatomy")
-    st.caption("Research v1.0")
-    st.page_link("main.py", label="Back to clinician workflow")
-    st.divider()
-    st.caption("This page explains the system. It is not part of the normal case workflow.")
-
-hero(
-    "Anatomy of an evidence-grounded tumor-board intelligence system",
-    "A detailed view of how a case moves from source material to a bounded, auditable decision-support brief. The architecture is intentionally layered so that extraction, evidence retrieval, verification, challenge, and consensus remain separate responsibilities.",
-    eyebrow="System Anatomy · Research v1.0",
-)
+st.set_page_config(page_title="Agent Anatomy | Tumor Board Intelligence", page_icon="🧭", layout="wide")
 
 st.markdown(
-    badge("36/36 frozen whole-system qualification", "ok")
-    + badge("0 observed safety-stop violations", "ok")
-    + badge("Decision support only", "warn"),
+    """
+<style>
+:root{--bg:#f7f7f4;--surface:#f2f1ed;--text:#26251e;--muted:#77746b;--border:rgba(38,37,30,.11);--accent:#c08532;--accent-dark:#9a6a28;--success:#1f8a65;--error:#cf2d56;}
+html,body,[class*="css"]{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+.stApp{background:var(--bg);color:var(--text)}
+.block-container{max-width:1480px;padding-top:1.6rem;padding-bottom:4rem}
+[data-testid="stHeader"]{background:rgba(247,247,244,.94);border-bottom:1px solid var(--border);backdrop-filter:blur(10px)}
+h1,h2,h3{color:var(--text);font-weight:550;letter-spacing:-.025em}h1{font-size:3rem!important;line-height:1.03!important}h2{font-size:1.6rem!important}h3{font-size:1rem!important}
+.hero{padding:28px 0 22px;border-bottom:1px solid var(--border);margin-bottom:18px}.eyebrow{font-size:.7rem;letter-spacing:.11em;text-transform:uppercase;color:var(--accent-dark);font-weight:750}.hero h1{max-width:1060px;margin:7px 0 10px}.hero p{max-width:930px;color:var(--muted);font-size:1rem;line-height:1.55;margin:0}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--border);border-radius:999px;background:#fff;font-size:.67rem;margin:2px 5px 2px 0}.dot{width:6px;height:6px;border-radius:50%;background:var(--success)}.dot.warn{background:var(--accent)}
+.arch-wrap{margin:22px 0 28px}.arch-flow{display:grid;grid-template-columns:1fr 42px 1fr 42px 1.35fr 42px 1fr 42px 1fr;align-items:center;gap:0}.node{background:#fff;border:1px solid var(--border);border-radius:6px;padding:13px;min-height:116px;box-shadow:0 1px 3px rgba(0,0,0,.035)}.node.accent{background:rgba(192,133,50,.09);border-color:rgba(192,133,50,.24)}.node.control{background:#fff6f7;border-color:rgba(207,45,86,.18)}.node.output{background:#f1f8f5;border-color:rgba(31,138,101,.2)}.node-k{font-size:.64rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:750;margin-bottom:5px}.node-t{font-size:.88rem;font-weight:700;margin-bottom:5px}.node-c{font-size:.69rem;line-height:1.4;color:var(--muted)}.arrow{text-align:center;color:#9b978e;font-size:1.3rem}.branch{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:8px}.mini{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:8px;font-size:.66rem;line-height:1.35}.mini b{display:block;font-size:.69rem;margin-bottom:2px}.mini span{color:var(--muted)}
+.arch-bottom{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:9px}.guard{background:#fff;border:1px solid var(--border);border-radius:5px;padding:10px}.guard b{display:block;font-size:.72rem;margin-bottom:3px}.guard span{font-size:.67rem;color:var(--muted);line-height:1.38}
+.stage{display:grid;grid-template-columns:54px 1.15fr 1.3fr 1fr;gap:14px;align-items:start;padding:16px 0;border-top:1px solid var(--border)}.stage-num{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--text);color:var(--bg);font-size:.72rem;font-weight:750}.stage h3{margin:1px 0 5px}.stage p{font-size:.78rem;line-height:1.48;color:var(--muted);margin:0}.stage-label{font-size:.64rem;text-transform:uppercase;letter-spacing:.08em;color:#8a877e;font-weight:750;margin-bottom:4px}.rule{padding:8px 9px;background:rgba(192,133,50,.08);border:1px solid rgba(192,133,50,.2);border-radius:4px;font-size:.7rem;line-height:1.38}.out{padding:8px 9px;background:rgba(31,138,101,.07);border:1px solid rgba(31,138,101,.18);border-radius:4px;font-size:.7rem;line-height:1.38}
+.inv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.inv{background:#fff;border:1px solid var(--border);border-radius:5px;padding:10px 12px}.inv b{font-size:.76rem}.inv span{display:block;color:var(--muted);font-size:.69rem;line-height:1.4;margin-top:3px}.footer-note{font-size:.72rem;color:var(--muted);border-top:1px solid var(--border);padding-top:12px;margin-top:22px}
+@media(max-width:1050px){.arch-flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg);padding:3px}.branch,.arch-bottom,.inv-grid{grid-template-columns:1fr}.stage{grid-template-columns:45px 1fr}.stage>div:nth-child(3),.stage>div:nth-child(4){grid-column:2}}
+</style>
+""",
     unsafe_allow_html=True,
 )
 
-st.markdown("## Executive view")
-st.write(
-    "The system is designed around a simple principle: no single model response is allowed to become a clinical recommendation. "
-    "Instead, the platform builds a structured case, verifies what it knows, identifies what it does not know, routes the question to bounded specialist services, challenges the outputs, and only then permits a management candidate to appear when the evidence contract allows it."
-)
-
-architecture_stage(
-    "01",
-    "Source truth and case construction",
-    "Convert narrative or document-based tumor-board material into a structured case without losing the relationship to the original source.",
-    [
-        ("Case ingestion", "Synthetic or fully de-identified narrative, PDF, DOCX, TXT, or structured case input."),
-        ("Structured extraction", "The extraction layer identifies diagnosis, disease state, treatment history, pathology, molecular findings, performance status, and the clinical question."),
-        ("Field-level provenance", "Every decision-relevant extracted fact can retain source-document, segment, and exact-excerpt references."),
-    ],
-    guardrail="No source means no patient fact. Unsupported model text is not accepted as canonical clinical data.",
-    outcome="Canonical CancerTumorBoardCase with observed, derived, interpreted, missing, and conflicting information represented explicitly.",
-)
-connector()
-
-architecture_stage(
-    "02",
-    "Deterministic integrity gates",
-    "Before specialist reasoning begins, the system checks whether the structured representation itself is safe enough to route downstream.",
-    [
-        ("Semantic Integrity", "Detects unsafe transformations such as pending being converted to negative, unsupported disease-state assertions, and known semantic integrity failures."),
-        ("Case Integrity / Data QA", "Checks provenance, schema consistency, diagnosis certainty, unresolved high-impact conflicts, duplicate treatment episodes, and temporal contradictions."),
-        ("Missing Information", "Classifies missing decision-relevant information and determines whether a case is READY, CONDITIONAL, or BLOCKED."),
-    ],
-    guardrail="Critical conflict, failed provenance, or recommendation-blocking missing information prevents downstream recommendation synthesis.",
-    outcome="A structurally qualified case or an explicit abstention with the reason for stopping.",
-)
-connector()
-
-architecture_stage(
-    "03",
-    "Clinical routing",
-    "Determine which evidence channels are relevant to the clinical question rather than sending every case through an undifferentiated prompt.",
-    [
-        ("Question classification", "Classifies treatment-management, diagnosis/workup, molecular-management, safety, trial, and related question domains."),
-        ("Complexity assessment", "Assigns routine, intermediate, complex, or high-complexity routing states."),
-        ("Specialist selection", "Selects required and conditional specialist agents while preserving a stable, auditable route."),
-    ],
-    guardrail="Routing determines which bounded services may act. It does not create a clinical conclusion.",
-    outcome="Typed RoutingDecision specifying required, conditional, selected, and omitted specialist agents.",
-)
-connector()
-
-architecture_stage(
-    "04",
-    "Parallel specialist evidence channels",
-    "Each specialist answers a narrower question under its own evidence and claim rules. These channels are deliberately separated because mechanism, guideline support, trial matching, and safety are not interchangeable forms of evidence.",
-    [
-        ("Guideline Agent", "Matches the represented case to verified formal or consensus guidelines. Authoritative summaries remain explicitly distinct from formal guideline recommendations."),
-        ("Literature Agent", "Performs bounded PubMed retrieval and records canonical publication identifiers without converting retrieval into a treatment recommendation."),
-        ("Molecular Interpretation", "Separates variant identity, disease context, prognostic significance, resistance evidence, and clinical actionability."),
-        ("Translational Biology", "Surfaces mechanistic, human translational, in-vivo, in-vitro, and hypothesis-level evidence without promoting biological plausibility into clinical actionability."),
-        ("Clinical Trials", "Searches current ClinicalTrials.gov records and surfaces possible matches while leaving individual eligibility unresolved."),
-        ("Safety Agent", "Matches verified safety evidence and can block recommendation synthesis when a relevant contraindication or unresolved monitoring requirement is represented."),
-    ],
-    guardrail="Gene match is not variant match. Mechanism is not actionability. Trial match is not eligibility. No verified source means no evidence claim.",
-    outcome="Separate structured specialist reports with explicit claim gates, evidence references, limitations, and failure states.",
-)
-connector()
-
-architecture_stage(
-    "05",
-    "Evidence verification and appraisal",
-    "Evidence records are not trusted merely because they were retrieved. Verification checks identity, source integrity, exact supporting spans, and structured appraisal fields before evidence can be promoted.",
-    [
-        ("Evidence Gateway", "Checks source authorization, license state, human verification, source hash, exact excerpts, and locators before evidence records enter the evidence stores."),
-        ("Evidence Verifier", "Requires exact verified source spans and preserves VERIFIED, PARTIALLY_VERIFIED, CONFLICTING, UNVERIFIED, and REJECTED states."),
-        ("Full-text Appraisal", "Structures PICO, endpoints, effect estimates, risk-of-bias review, applicability, and source provenance without creating a new clinical recommendation."),
-    ],
-    guardrail="No exact verified source span means no verified evidence claim. A retrieved article is not automatically a clinically applicable result.",
-    outcome="Verified or explicitly limited evidence atoms suitable for downstream challenge and synthesis.",
-)
-connector()
-
-architecture_stage(
-    "06",
-    "Independent Clinical Red Team",
-    "Challenge the assembled evidence stack before consensus. The Red Team is intentionally independent of specialist generation and looks for unsafe promotion, missing required channels, conflicts, and recommendation-blocking safety conditions.",
-    [
-        ("Promotion checks", "Detects translational-to-clinical promotion, trial-match-to-eligibility promotion, unsupported guideline promotion, and internal claim-gate inconsistencies."),
-        ("Orchestration checks", "Detects missing required specialist outputs, failed channels, unresolved critical case conflicts, and missing recommendation-blocking information."),
-        ("Safety challenge", "Blocks consensus when prespecified recommendation-blocking safety findings remain unresolved."),
-    ],
-    guardrail="Agent agreement is not truth. A bounded no-result search is not negative evidence. CLEAR means no prespecified deterministic violation was found, not that the case is clinically correct.",
-    outcome="CLEAR, CHALLENGED, or BLOCKED ClinicalRedTeamReport with explicit findings and effects on recommendation synthesis.",
-)
-connector()
-
-architecture_stage(
-    "07",
-    "Evidence-weighted consensus",
-    "Integrate specialist outputs without majority voting. The current conservative v1 contract permits an explicit management candidate only when a verified formal or consensus guideline recommendation anchors it.",
-    [
-        ("Evidence-channel ledger", "Records each selected channel as supportive, limiting, unavailable, non-decisional, or not selected."),
-        ("Candidate construction", "Creates management candidates only from allowed verified recommendation records and preserves conditions, exclusions, source excerpts, and locators."),
-        ("Abstention logic", "Withholds recommendation synthesis when required channels fail, Red Team blocks, safety blocks, or no permitted management anchor exists."),
-    ],
-    guardrail="Consensus is not a vote. Molecular, translational, literature, and trial signals cannot independently manufacture a treatment strategy in v1.",
-    outcome="PREFERRED_CONDITIONAL, MULTIPLE_REASONABLE_OPTIONS, or ABSTAIN, with bounded decision-support strength and preserved uncertainty.",
-)
-connector()
-
-architecture_stage(
-    "08",
-    "Tumor Board Intelligence Brief",
-    "Transform the canonical case and verified downstream reports into a clinician-facing brief without adding new clinical claims.",
-    [
-        ("Clinical synthesis", "Patient snapshot, treatment timeline, pathology, molecular profile, current question, and decision-critical gaps."),
-        ("Evidence view", "Guideline analysis, literature, molecular/translational evidence, trials, safety, source references, and evidence boundaries."),
-        ("Decision view", "Consensus-authorized management candidates, alternatives, Red Team challenges, uncertainty, and what could change the recommendation."),
-    ],
-    guardrail="Consensus abstain means Management Strategy = WITHHELD. The renderer does not re-rank, infer, or generate an unsupported recommendation.",
-    outcome="A source-traceable, decision-support-only TumorBoardIntelligenceBrief for human multidisciplinary review.",
-)
-connector()
-
-architecture_stage(
-    "09",
-    "Human tumor-board adjudication and learning loop",
-    "The system stops at decision support. Final clinical judgment remains with the multidisciplinary tumor board, and disagreement is valuable data rather than an error to be automatically overwritten.",
-    [
-        ("Human adjudication", "Clinicians review the case representation, evidence, alternatives, safety constraints, and unresolved uncertainties."),
-        ("Decision capture", "Future governed deployments may capture the board decision and rationale as an outcome, but not automatically as ground truth."),
-        ("Evaluation loop", "Retrospective and prospective silent studies can assess concordance, safety, utility, abstention quality, evidence fidelity, and time saved."),
-    ],
-    guardrail="Tumor-board decision is not automatically ground truth, and the research prototype is not an autonomous treatment system.",
-    outcome="Human-reviewed clinical decision plus a future governed evaluation record.",
-)
-
-st.markdown("## Why the architecture is intentionally separated")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.markdown('<div class="ctb-card"><div class="ctb-kicker">Separation of concerns</div><h3>Different evidence has different meaning</h3><p>A formal guideline, a molecular biomarker, a preclinical mechanism, a trial listing, and a safety warning are not equivalent signals. Separate agents keep their epistemic boundaries visible.</p></div>', unsafe_allow_html=True)
-with col2:
-    st.markdown('<div class="ctb-card"><div class="ctb-kicker">Auditability</div><h3>Every stage can be inspected</h3><p>The route, source records, verification status, Red Team findings, consensus state, and final rendering can be reviewed independently instead of being buried inside one model response.</p></div>', unsafe_allow_html=True)
-with col3:
-    st.markdown('<div class="ctb-card"><div class="ctb-kicker">Failure containment</div><h3>Unsafe states fail closed</h3><p>Missing information, failed verification, evidence-source failure, unsafe promotion, and safety blockers are designed to stop or constrain synthesis rather than be averaged away.</p></div>', unsafe_allow_html=True)
-
-st.markdown("## The core safety vocabulary")
 st.markdown(
     """
-| Invariant | Meaning |
-|---|---|
-| **NO SOURCE → NO PATIENT FACT** | A model statement cannot become a patient fact without source support. |
-| **NO VERIFIED EVIDENCE → NO EVIDENCE CLAIM** | Retrieval alone is insufficient. Evidence must pass the appropriate verification contract. |
-| **PENDING ≠ NEGATIVE** | Unknown, pending, absent-from-record, and truly negative are different states. |
-| **BIOLOGICAL PLAUSIBILITY ≠ CLINICAL ACTIONABILITY** | Mechanistic evidence cannot independently justify treatment action. |
-| **TRIAL MATCH ≠ TRIAL ELIGIBILITY** | Search overlap does not establish that a patient meets inclusion/exclusion criteria. |
-| **AGENT AGREEMENT ≠ TRUTH** | Consensus is evidence-gated, not majority voting. |
-| **LOW INFORMATION → ABSTAIN OR REQUEST MORE INFORMATION** | The system is allowed to stop. |
-| **CRITICAL CONFLICT → HUMAN REVIEW** | Important unresolved contradictions are not silently resolved by the model. |
-| **FAILED VERIFICATION → DO NOT PROPAGATE CLAIM** | Failed evidence cannot reappear downstream as if it had been verified. |
-| **CONSENSUS ABSTAIN → MANAGEMENT WITHHELD** | The presentation layer cannot circumvent the decision gate. |
-"""
+<section class="hero">
+  <div class="eyebrow">Agent Anatomy · Research v1.0</div>
+  <h1>How an evidence-grounded tumor-board agent system turns source material into a bounded clinical brief</h1>
+  <p>This page exposes the architecture behind Tumor Board Intelligence. The system separates case construction, data integrity, evidence retrieval, verification, specialist interpretation, adversarial challenge, consensus, and presentation so that no single model response can silently become a clinical recommendation.</p>
+</section>
+""",
+    unsafe_allow_html=True,
+)
+
+c1, c2, c3 = st.columns([1,1,4])
+with c1:
+    st.page_link("00_Mission_Control.py", label="Back to Mission Control", use_container_width=True)
+with c2:
+    st.link_button("AI Agents in Medicine", ARTICLE_URL, use_container_width=True)
+
+st.markdown(
+    '<span class="badge"><span class="dot"></span>36/36 frozen whole-system qualification</span>'
+    '<span class="badge"><span class="dot"></span>0 observed safety-stop violations</span>'
+    '<span class="badge"><span class="dot warn"></span>Decision support only</span>',
+    unsafe_allow_html=True,
+)
+
+st.markdown("## Architecture at a glance")
+st.caption("The diagram shows the main control path. Specialist agents run as bounded evidence channels rather than as one undifferentiated conversational model.")
+
+st.markdown(
+    """
+<div class="arch-wrap">
+  <div class="arch-flow">
+    <div class="node">
+      <div class="node-k">01 · Source truth</div><div class="node-t">Case Input</div>
+      <div class="node-c">Narrative, PDF, DOCX, structured case, or clinician follow-up information.</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node">
+      <div class="node-k">02 · Understand</div><div class="node-t">Extraction Agent</div>
+      <div class="node-c">Builds the canonical case and preserves field-level provenance.</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node accent">
+      <div class="node-k">03 · Validate + route</div><div class="node-t">Integrity, Missing Information & Router</div>
+      <div class="node-c">Checks whether the represented case is coherent enough to enter specialist analysis.</div>
+      <div class="branch">
+        <div class="mini"><b>Case Integrity</b><span>Schema, provenance, conflict and temporal checks.</span></div>
+        <div class="mini"><b>Missing Information</b><span>Decision-critical gaps and blocking status.</span></div>
+        <div class="mini"><b>Clinical Router</b><span>Selects only relevant specialist agents.</span></div>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node">
+      <div class="node-k">04 · Specialist evidence</div><div class="node-t">Parallel Agent Stack</div>
+      <div class="branch">
+        <div class="mini"><b>Guideline</b><span>Verified formal/consensus guidance.</span></div>
+        <div class="mini"><b>Literature</b><span>Bounded PubMed retrieval.</span></div>
+        <div class="mini"><b>Molecular</b><span>Disease + alteration context.</span></div>
+        <div class="mini"><b>Translational</b><span>Mechanistic/preclinical evidence.</span></div>
+        <div class="mini"><b>Trials</b><span>Possible matches, not eligibility.</span></div>
+        <div class="mini"><b>Safety</b><span>Verified safety constraints.</span></div>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node control">
+      <div class="node-k">05 · Challenge</div><div class="node-t">Verification + Clinical Red Team</div>
+      <div class="node-c">Tests source support, claim promotion, missing channels, conflicts and safety blockers before synthesis.</div>
+    </div>
+  </div>
+  <div class="arch-bottom">
+    <div class="guard"><b>Evidence Gateway / Verifier</b><span>Retrieved content cannot become a verified claim without the required source contract.</span></div>
+    <div class="guard"><b>Clinical Red Team</b><span>Independent deterministic challenge. Agent agreement is not treated as truth.</span></div>
+    <div class="guard"><b>Consensus Engine</b><span>Evidence-weighted synthesis, never majority voting. Unsafe or unsupported states abstain.</span></div>
+    <div class="guard"><b>Tumor Board Brief</b><span>Presentation transformer only. If consensus abstains, management strategy remains withheld.</span></div>
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+st.markdown("## Detailed agent anatomy")
+
+stages = [
+    ("01", "Case Source Input", "Establish the source material that the system is allowed to treat as case evidence.", "Accepts synthetic or fully de-identified narrative, PDF, DOCX, TXT/MD, structured case input, or clinician follow-up information. Follow-up text is treated as supplemental source material rather than as a conversational instruction.", "NO SOURCE → NO PATIENT FACT. Unknown, pending, absent-from-record and negative remain distinct states.", "A bounded source document or structured source representation."),
+    ("02", "Extraction Agent", "Convert source material into a canonical structured tumor-board case.", "Extracts diagnosis, disease state, performance status, treatments, pathology, molecular findings, clinical question and other represented facts. The v2.5 contract carries provenance anchors for supported facts.", "The model may structure source information, but unsupported text cannot enter the canonical patient state.", "CancerTumorBoardCase plus extraction provenance and verification record."),
+    ("03", "Case Integrity / Data QA Agent", "Decide whether the structured representation is internally safe enough to propagate.", "Checks verified provenance, schema consistency, diagnostic certainty, unresolved conflicts, treatment identity and temporal consistency.", "Recommendation-blocking structural defects stop routing rather than being averaged away downstream.", "CaseIntegrityReport with routing permission or explicit stop condition."),
+    ("04", "Missing Information Agent", "Identify information gaps that could materially change tumor-board interpretation.", "Classifies gaps by category, priority, requested action and recommendation-blocking status. Questions shown in Mission Control come from this layer.", "Missing information is never silently repaired, inferred or converted into a normal value.", "READY, CONDITIONAL or BLOCKED MissingInformationReport."),
+    ("05", "Clinical Router", "Select the specialist evidence channels relevant to the represented clinical question.", "Classifies the question and routes to guideline, literature, molecular, translational, clinical-trial and safety agents as required.", "Routing chooses tools. It does not itself create a treatment conclusion.", "Typed RoutingDecision with selected and omitted specialist channels."),
+    ("06", "Guideline Agent", "Determine whether verified guideline material supports a case-relevant management statement.", "Matches the represented disease context to preverified formal or consensus guideline records. Authoritative summaries such as NCI PDQ remain a separate evidence class rather than being mislabeled as formal guidelines.", "NO VERIFIED SOURCE → NO GUIDELINE CLAIM.", "Guideline report with source identity, match type, recommendation text and claim gate."),
+    ("07", "Literature Agent + Evidence Verifier", "Retrieve current literature while separating retrieval from verification.", "Performs bounded PubMed search using structured case concepts. Evidence verification requires source identity and exact supporting spans before a literature claim is allowed to influence synthesis.", "RETRIEVED ≠ VERIFIED. A paper found by search is not automatically clinically applicable evidence.", "Structured literature records with verification state and limitations."),
+    ("08", "Molecular Interpretation Agent", "Interpret represented molecular findings without promoting gene identity into clinical actionability.", "Matches disease context and alteration identity to preverified molecular evidence. Prognostic, resistance, sensitivity and actionability states remain distinct.", "GENE MATCH ≠ ALTERATION MATCH. MOLECULAR SIGNAL ≠ TREATMENT ELIGIBILITY.", "Molecular interpretation report with bounded clinical-actionability gate."),
+    ("09", "Translational Biology Agent", "Provide mechanistic and preclinical context without confusing plausibility with established clinical action.", "Surfaces human translational, in-vivo, in-vitro and hypothesis-level evidence under explicit evidence tiers.", "BIOLOGICAL PLAUSIBILITY ≠ CLINICAL ACTIONABILITY. PRECLINICAL SENSITIVITY ≠ TREATMENT RECOMMENDATION.", "Translational report labeled by evidence tier and context match."),
+    ("10", "Clinical Trials Agent", "Surface potentially relevant current studies without determining individual eligibility.", "Searches ClinicalTrials.gov using bounded disease and represented molecular concepts. It preserves disease-context matching and recruitment state.", "TRIAL MATCH ≠ TRIAL ELIGIBILITY.", "Possible trial matches with identifiers, context and explicit eligibility limitation."),
+    ("11", "Safety Agent", "Identify source-verified safety constraints that can condition or block synthesis.", "Matches represented therapies and patient triggers to verified safety evidence. Recommendation-blocking findings can stop downstream management rendering.", "NO VERIFIED SAFETY SOURCE → NO SAFETY CLAIM. MISSING MONITORING VALUE ≠ NORMAL VALUE.", "Safety report with supported findings and recommendation-blocking state."),
+    ("12", "Clinical Red Team", "Independently challenge the assembled specialist stack before consensus.", "Detects unsupported claim promotion, required specialist failure, unresolved high-impact conflicts, recommendation-blocking missing information, trial-eligibility overreach and safety bypass attempts.", "AGENT AGREEMENT ≠ TRUTH. NO EVIDENCE FOUND ≠ NEGATIVE EVIDENCE.", "CLEAR, CHALLENGED or BLOCKED report with explicit findings."),
+    ("13", "Consensus Engine", "Integrate qualified evidence without voting and without inventing strategies from weak channels.", "Builds management candidates only from permitted structured recommendation records and preserves conditions, alternatives, disagreements and uncertainty.", "RED TEAM BLOCK → ABSTAIN. SAFETY BLOCK → ABSTAIN. TRANSLATIONAL/TRIAL-ONLY SIGNALS CANNOT MANUFACTURE A MANAGEMENT RECOMMENDATION.", "Preferred conditional option, multiple reasonable options, or abstention."),
+    ("14", "Tumor Board Intelligence Brief", "Present the qualified state in a clinician-readable form without adding new reasoning.", "Renders patient snapshot, clinical question, decision-critical gaps, management discussion, evidence, molecular/translational context, trials, safety, Red Team findings, uncertainty and source trace.", "CONSENSUS ABSTAIN → MANAGEMENT STRATEGY WITHHELD.", "Board-ready, source-traceable decision-support brief."),
+    ("15", "Human Tumor Board", "Keep final clinical judgment with the multidisciplinary team.", "Clinicians adjudicate evidence, uncertainty, patient context and alternatives. Future governed studies may compare the platform with board decisions and expert adjudication.", "TUMOR-BOARD DECISION ≠ AUTOMATIC GROUND TRUTH. The platform is not an autonomous treatment system.", "Human-reviewed clinical decision and, in future studies, a governed evaluation record."),
+]
+
+for num, name, purpose, does, guardrail, output in stages:
+    st.markdown(
+        f"""
+<div class="stage">
+  <div class="stage-num">{num}</div>
+  <div><h3>{name}</h3><p>{purpose}</p></div>
+  <div><div class="stage-label">What it does</div><p>{does}</p></div>
+  <div><div class="stage-label">Guardrail</div><div class="rule">{guardrail}</div><div class="stage-label" style="margin-top:7px">Output</div><div class="out">{output}</div></div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+st.markdown("## Core safety invariants")
+st.markdown(
+    """
+<div class="inv-grid">
+  <div class="inv"><b>NO SOURCE → NO PATIENT FACT</b><span>Source truth is separated from interpretation.</span></div>
+  <div class="inv"><b>NO VERIFIED EVIDENCE → NO EVIDENCE CLAIM</b><span>Retrieval does not automatically authorize synthesis.</span></div>
+  <div class="inv"><b>PENDING ≠ NEGATIVE</b><span>Unresolved states are preserved rather than normalized into certainty.</span></div>
+  <div class="inv"><b>BIOLOGICAL PLAUSIBILITY ≠ CLINICAL ACTIONABILITY</b><span>Mechanistic evidence has a different epistemic role from management evidence.</span></div>
+  <div class="inv"><b>TRIAL MATCH ≠ TRIAL ELIGIBILITY</b><span>Search overlap cannot determine patient-level inclusion or exclusion.</span></div>
+  <div class="inv"><b>AGENT AGREEMENT ≠ TRUTH</b><span>Consensus is evidence-gated, not majority voting.</span></div>
+  <div class="inv"><b>CRITICAL CONFLICT → HUMAN REVIEW</b><span>Important contradictions are preserved and escalated.</span></div>
+  <div class="inv"><b>FAILED VERIFICATION → DO NOT PROPAGATE CLAIM</b><span>Unsupported content cannot reappear later as if verified.</span></div>
+  <div class="inv"><b>LOW INFORMATION → ABSTAIN OR REQUEST MORE INFORMATION</b><span>Stopping is a valid system behavior.</span></div>
+  <div class="inv"><b>CONSENSUS ABSTAIN → MANAGEMENT WITHHELD</b><span>The presentation layer cannot bypass the decision gate.</span></div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+st.markdown("## Why this is a useful companion to an AI-agents-in-healthcare discussion")
+st.write(
+    "A conceptual discussion of agents becomes more concrete when readers can inspect an implementation that separates tools, evidence classes, verification, adversarial challenge, abstention and human review. This prototype is intended as a worked example of those design principles, not as evidence that agentic clinical systems are ready for autonomous use."
 )
 
 st.markdown("## Validation boundary")
 st.info(
-    "The current research prototype completed a frozen controlled synthetic whole-system qualification with 36/36 strict case-execution passes and zero observed safety-stop violations. This is controlled software qualification, not clinical validation, proof of real-world efficacy, or authorization for autonomous clinical use."
+    "The research prototype completed a frozen controlled synthetic whole-system qualification with 36/36 strict case-execution passes and zero observed safety-stop violations. This is controlled software qualification, not clinical validation, proof of real-world efficacy, or authorization for autonomous clinical use."
 )
 
-st.markdown("## How a clinician should experience it")
-st.write(
-    "The architecture above is intentionally deep, but the clinician-facing workflow is shallow. A user normally interacts with only four moments: enter the case, verify what the system understood, run the analysis, and review the tumor-board brief. Evidence and audit views are available only when deeper inspection is needed."
-)
-
-st.page_link("main.py", label="Return to clinician workflow")
+st.markdown('<div class="footer-note">Tumor Board Intelligence · Research prototype · Synthetic/de-identified data only · Human multidisciplinary review remains required.</div>', unsafe_allow_html=True)

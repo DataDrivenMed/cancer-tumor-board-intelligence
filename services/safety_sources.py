@@ -6,11 +6,44 @@ from schemas.safety import (
     SafetyEvidenceType,
     SafetySeverity,
 )
+from services.production_evidence_config import EvidenceConfigStatus, load_channel_payload
 
 
-# Production-safe default. Real safety evidence must be independently verified,
-# versioned, and loaded from an authorized source before it can affect synthesis.
-PRODUCTION_SAFETY_STORE = SafetyEvidenceStore()
+def _load_production_safety_store() -> tuple[SafetyEvidenceStore, EvidenceConfigStatus]:
+    payload, status = load_channel_payload("safety")
+    if payload is None:
+        return SafetyEvidenceStore(), status
+
+    try:
+        if isinstance(payload, dict):
+            records_payload = payload.get("records", [])
+        elif isinstance(payload, list):
+            records_payload = payload
+        else:
+            raise ValueError("Safety evidence configuration must be a JSON object or list.")
+        store = SafetyEvidenceStore(
+            records=[SafetyEvidenceRecord.model_validate(x) for x in records_payload]
+        )
+        return store, EvidenceConfigStatus(
+            channel="safety",
+            configured=True,
+            loaded=True,
+            record_count=len(store.records),
+            configuration_origin=status.configuration_origin,
+        )
+    except Exception as exc:
+        return SafetyEvidenceStore(), EvidenceConfigStatus(
+            channel="safety",
+            configured=True,
+            loaded=False,
+            error=f"{type(exc).__name__}: {exc}",
+            configuration_origin=status.configuration_origin,
+        )
+
+
+# Real safety evidence must be independently verified and supplied through
+# SAFETY_EVIDENCE_JSON or SAFETY_EVIDENCE_PATH. Invalid configuration fails closed.
+PRODUCTION_SAFETY_STORE, PRODUCTION_SAFETY_STATUS = _load_production_safety_store()
 
 
 def synthetic_safety_store() -> SafetyEvidenceStore:

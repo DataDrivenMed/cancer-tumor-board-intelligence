@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from docx import Document
 from pypdf import PdfReader
@@ -50,7 +51,29 @@ def _clean(text: str) -> str:
     return " ".join((text or "").split()).strip()
 
 
-def parse_upload(filename: str, raw_bytes: bytes, document_id: str = "DOC-001") -> ParsedDocument:
+def _upload_parts(filename: str | Any, raw_bytes: bytes | None) -> tuple[str, bytes]:
+    """Normalize filename/bytes arguments, including Streamlit UploadedFile objects."""
+    if raw_bytes is not None:
+        return str(filename), bytes(raw_bytes)
+
+    name = getattr(filename, "name", None)
+    if not name:
+        raise TypeError("parse_upload requires (filename, raw_bytes) or an upload object with a name.")
+
+    if hasattr(filename, "getvalue"):
+        payload = filename.getvalue()
+    elif hasattr(filename, "read"):
+        payload = filename.read()
+    else:
+        raise TypeError("Upload object must expose getvalue() or read().")
+
+    if not isinstance(payload, (bytes, bytearray)):
+        raise TypeError("Upload content must be bytes.")
+    return str(name), bytes(payload)
+
+
+def parse_upload(filename: str | Any, raw_bytes: bytes | None = None, document_id: str = "DOC-001") -> ParsedDocument:
+    filename, raw_bytes = _upload_parts(filename, raw_bytes)
     suffix = Path(filename).suffix.lower()
     segments: list[SourceSegment] = []
 

@@ -1,86 +1,119 @@
 # Cancer Tumor Board Intelligence Platform
 
-Research-prototype scaffold for an agentic, evidence-grounded tumor-board intelligence system.
+Research decision-support platform for evidence-grounded, agentic multidisciplinary cancer case review.
 
-## Current milestone
+The current product focuses on hematologic malignancies and is designed around provenance, explicit missingness, independent evidence channels, challenge review, consensus gates, abstention, and a structured tumor-board brief. It is **not clinically validated for autonomous or unsupervised patient-care use**.
 
-The current build includes provenance-aware case extraction, canonical case representation, data-quality checks, mock specialist routing, abstention logic, a tumor-board brief shell, an audit trail, and a 10-case synthetic extraction qualification suite.
+## Product workflow
 
-It intentionally contains **no validated clinical recommendation engine** and **no real patient data**.
+```text
+De-identified narrative / document / synthetic case
+  -> provenance-aware extraction
+  -> canonical structured case
+  -> clinician review
+  -> semantic-integrity + Case Integrity / Data QA
+  -> Missing Information gate
+  -> clinical routing
+  -> independent evidence channels
+       guidelines
+       current literature
+       molecular evidence
+       translational evidence
+       ClinicalTrials.gov
+       safety evidence
+  -> Clinical Red Team
+  -> evidence-weighted Consensus Engine
+  -> recommendation / conditional state / abstention
+  -> structured Tumor Board Intelligence Brief
+  -> audit trace
+```
+
+The system does not use agent voting as a proxy for truth. Required evidence-channel failures can prevent consensus. Trial matching is not eligibility. Biological plausibility is not clinical actionability. Failed verification does not propagate downstream.
+
+## Executive clinician workspace
+
+`app/main.py` opens the clinician-facing workspace. The normal interface emphasizes:
+
+- case intake and source provenance
+- structured case review before analysis
+- decision state and evidence availability
+- human-readable challenge findings
+- Case QA and information completeness
+- structured evidence and audit views
+
+Implementation details and technical agent terminology are intentionally de-emphasized in the normal clinical workflow.
 
 ## Open-weight model architecture
 
-The development build is no longer tied to the OpenAI API.
-
-Primary open-weight reasoning model target:
+The extraction layer is provider-neutral and uses an OpenAI-compatible gateway. The current default open-weight reasoning model target is:
 
 ```text
-openai/gpt-oss-120b
-reasoning effort: high
+openai/gpt-oss-120b:fireworks-ai
 ```
 
-The application uses an OpenAI-compatible model gateway, so the same clinical workflow can point to:
+No OpenAI API key is required for this configuration. Model weights and the inference host remain separate so the same workflow can later point to another compatible provider or institutional infrastructure.
 
-- Hugging Face Inference Providers
-- Groq or another compatible inference host
-- a self-hosted vLLM-compatible endpoint
-- later institutional GPU infrastructure
+Set model credentials only in the deployment secret store:
 
-The model weights and the inference host are deliberately separated.
-
-### Hosted Streamlit development configuration
-
-For the current public Streamlit prototype, the default route is Hugging Face Inference Providers with the Fireworks backend because that route supports gpt-oss-120b and JSON-schema structured output.
-
-Add these values only in Streamlit Secrets, never in GitHub:
-
-```toml
-MODEL_AUTH_TOKEN = "YOUR_HUGGING_FACE_TOKEN"
-MODEL_NAME = "openai/gpt-oss-120b:fireworks-ai"
-MODEL_REASONING_EFFORT = "high"
+```text
+MODEL_AUTH_TOKEN=<provider token>
+MODEL_NAME=openai/gpt-oss-120b:fireworks-ai
+MODEL_BASE_URL=<optional compatible endpoint>
 ```
 
-Optional self-hosted endpoint:
+Never commit credentials to this repository.
 
-```toml
-MODEL_BASE_URL = "https://your-compatible-model-endpoint/v1"
-MODEL_AUTH_TOKEN = "OPTIONAL_ENDPOINT_TOKEN"
-MODEL_NAME = "openai/gpt-oss-120b"
-MODEL_REASONING_EFFORT = "high"
+## Public evidence retrieval
+
+The product supports opt-in live retrieval from official public sources:
+
+```text
+ENABLE_LIVE_PUBMED=true
+PUBMED_EMAIL=<NCBI contact email>
+NCBI_API_KEY=<optional>
+ENABLE_LIVE_CLINICALTRIALS=true
 ```
 
-No `OPENAI_API_KEY` is required.
+ClinicalTrials.gov matching applies deterministic disease context, recruitment status, and explicit registry age-bound screening. It does not determine eligibility.
 
-## Extraction qualification suite
+PubMed retrieval remains evidence discovery, not evidence verification. Obvious title-level pediatric/adult population mismatches can be removed from surfaced records, but study applicability still requires evidence appraisal.
 
-The Streamlit app includes an **Extraction Benchmark** page with 10 synthetic hematologic malignancy cases designed to stress different failure modes:
+## Governed clinical evidence
 
-1. straightforward AML extraction
-2. missing ECOG and renal information
-3. conflicting pathology
-4. pending FLT3 testing that must not be converted into a positive result
-5. complex multi-line AML treatment chronology
-6. a molecular variant without documented clinical actionability
-7. conflicting lymphoma stage information
-8. myeloma with transplant and multiple prior regimens
-9. historical cancer information that must not contaminate the current diagnosis
-10. an intentionally insufficient case requiring preservation of uncertainty
+Guideline, molecular, safety, and optional translational evidence can be supplied at deployment without changing source code. See [`docs/PRODUCTION_CONFIGURATION.md`](docs/PRODUCTION_CONFIGURATION.md).
 
-Pre-specified gold expectations are stored separately from model output. Deterministic scoring currently reports key-field accuracy, exact provenance verification, missing-information recall, conflict detection, molecular coverage, treatment coverage and chronology, prohibited assertions, and unsupported-provenance confirmed assertions.
+The production stores fail closed when evidence is missing or invalid. The repository does not bundle licensed guideline content.
 
-The current unsupported-provenance metric is deliberately narrow: it checks whether confirmed claims possess exact source anchors. It is **not** treated as a complete semantic hallucination detector. Human adjudication and later semantic error analysis remain required before any claim of clinical validation.
-
-Provisional development gate before enabling downstream clinical reasoning:
-
-- 10/10 qualification cases pass the core gate
-- 100% exact provenance verification
-- zero prohibited inferred assertions
-- zero unsupported-provenance confirmed assertions
-- manual review of every benchmark failure
+NCI PDQ is handled as an **authoritative evidence summary**, not a formal guideline. Its AML adapter uses exact-source statements and requires explicit human verification before admission through the evidence gateway.
 
 ## Safety scope
 
-Use synthetic or fully de-identified research cases only. This repository is not intended for direct clinical care.
+Use synthetic or fully de-identified research cases only.
+
+Key invariants include:
+
+- no source -> no patient fact
+- no verified evidence -> no evidence claim
+- pending != negative
+- biological plausibility != clinical actionability
+- trial match != trial eligibility
+- agent agreement != truth
+- low information -> abstain or request more information
+- critical conflict -> human review
+- failed verification -> do not propagate the claim
+- consensus abstain -> management withheld
+
+Reasoning chain-of-thought is not stored or displayed. Audit outputs contain structured facts, provenance, source references, statuses, evidence boundaries, and decision gates.
+
+## Validation history and boundary
+
+The repository preserves its historical development failures and qualification milestones rather than rewriting them.
+
+The frozen **Extraction Remediation Validation v2.5** completed 30/30 strict case-execution passes in its controlled synthetic remediation benchmark, with 144/144 exact provenance anchors and zero observed safety-gate violations.
+
+The frozen **Whole-System Qualification v1.0.0** completed 36/36 strict controlled synthetic post-extraction integration case executions with zero observed safety-stop violations, and all repeated adversarial cases passed 3/3.
+
+These are controlled synthetic development benchmarks. They are **not clinical validation**. Product, retrieval, evidence-configuration, and frontend changes made after the frozen qualification commits are post-qualification integration work unless the frozen protocol is explicitly rerun. Passing ordinary regression CI does not constitute requalification.
 
 ## Run locally
 
@@ -103,32 +136,18 @@ streamlit run app/main.py
 pytest -q
 ```
 
-## Architecture
+GitHub Actions also compiles the Python modules and runs the regression suite for pull requests targeting `main`.
+
+## Repository map
 
 ```text
-Narrative / document
-  -> provenance-aware extraction
-  -> canonical case
-  -> integrity + missing-data gate
-  -> human verification
-  -> router
-  -> independent specialist agents
-  -> evidence verification
-  -> preliminary synthesis
-  -> red-team review
-  -> deterministic abstention / confidence gate
-  -> tumor-board brief
-  -> audit trail
+agents/          bounded specialist and control agents
+schemas/         Pydantic contracts
+services/        source clients, evidence gateways, configuration, normalization
+orchestration/   routing and workflow integration
+app/             Streamlit product and research UI
+synthetic_cases/ controlled development fixtures
+tests/           regression tests
+qualification/   frozen qualification assets and protocols
+docs/            architecture and deployment documentation
 ```
-
-## Important design principles
-
-- Observed, derived, and interpreted information remain distinct.
-- Patient facts retain provenance.
-- Missingness is explicit.
-- Contradictions are first-class objects.
-- Specialist outputs are structured rather than free-form essays.
-- Agent disagreement is preserved.
-- The system can abstain.
-- Final output includes an audit trail.
-- Model selection will be evaluated on oncology-specific benchmarks rather than accepted from vendor benchmark claims alone.

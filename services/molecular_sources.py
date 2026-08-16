@@ -9,11 +9,44 @@ from schemas.molecular import (
     MolecularEvidenceStore,
     MolecularEvidenceTier,
 )
+from services.production_evidence_config import EvidenceConfigStatus, load_channel_payload
 
 
-# Production is intentionally empty until disease- and alteration-specific records
-# have been independently verified and approved for use.
-PRODUCTION_MOLECULAR_STORE = MolecularEvidenceStore()
+def _load_production_molecular_store() -> tuple[MolecularEvidenceStore, EvidenceConfigStatus]:
+    payload, status = load_channel_payload("molecular")
+    if payload is None:
+        return MolecularEvidenceStore(), status
+
+    try:
+        if isinstance(payload, dict):
+            records_payload = payload.get("records", [])
+        elif isinstance(payload, list):
+            records_payload = payload
+        else:
+            raise ValueError("Molecular evidence configuration must be a JSON object or list.")
+        store = MolecularEvidenceStore(
+            records=[MolecularEvidenceRecord.model_validate(x) for x in records_payload]
+        )
+        return store, EvidenceConfigStatus(
+            channel="molecular",
+            configured=True,
+            loaded=True,
+            record_count=len(store.records),
+            configuration_origin=status.configuration_origin,
+        )
+    except Exception as exc:
+        return MolecularEvidenceStore(), EvidenceConfigStatus(
+            channel="molecular",
+            configured=True,
+            loaded=False,
+            error=f"{type(exc).__name__}: {exc}",
+            configuration_origin=status.configuration_origin,
+        )
+
+
+# Production remains empty unless independently verified evidence is configured.
+# Deployment can supply MOLECULAR_EVIDENCE_JSON or MOLECULAR_EVIDENCE_PATH.
+PRODUCTION_MOLECULAR_STORE, PRODUCTION_MOLECULAR_STATUS = _load_production_molecular_store()
 
 
 def build_synthetic_molecular_store() -> MolecularEvidenceStore:

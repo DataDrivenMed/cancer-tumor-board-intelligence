@@ -6,6 +6,9 @@ secondaryBackgroundColor = "#F2F1ED"
 textColor = "#26251E"
 font = "sans serif"
 
+[client]
+showSidebarNavigation = false
+
 [server]
 headless = true
 

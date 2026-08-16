@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import re
 
 from schemas.case import CancerTumorBoardCase, DataStatus
 from schemas.guideline import (
@@ -15,7 +16,7 @@ from services.oncology_programs import is_registered_oncology_program
 
 
 AGENT_ID = "guideline"
-AGENT_VERSION = "1.3.0"
+AGENT_VERSION = "1.3.1"
 
 
 @dataclass(frozen=True)
@@ -47,22 +48,53 @@ def _text_match(case_value: object | None, allowed_terms: list[str]) -> bool:
     return False
 
 
+_STAGE_LABEL_RE = re.compile(
+    r"\bstage\s+(0|[1-4](?:[abc])?(?:[1-3])?|[ivx]{1,4}(?:[abc])?(?:[1-3])?)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _canonical_stage_label(value: object | None) -> str | None:
+    """Return an exact canonical stage label without deriving stage from other data."""
+    text = _norm(value)
+    match = _STAGE_LABEL_RE.search(text)
+    if not match:
+        return None
+    raw = match.group(1).upper()
+    roman_to_arabic = {"I": "1", "II": "2", "III": "3", "IV": "4"}
+    for roman in ("IV", "III", "II", "I"):
+        if raw.startswith(roman):
+            return roman_to_arabic[roman] + raw[len(roman):]
+    return raw
+
+
 def _verified_stage_text(case: CancerTumorBoardCase) -> str:
     stage = case.stage
     if stage is None or stage.status != DataStatus.CONFIRMED or not stage.human_verified:
         return ""
     if not any(bool(getattr(p, "source_verified", False)) for p in (stage.provenance or [])):
         return ""
-    return _norm(stage.value)
+    return str(stage.value or "")
 
 
 def _stage_requirements_match(case: CancerTumorBoardCase, stage_terms: list[str]) -> bool:
+    """Match only explicit stage labels; never use generic token overlap.
+
+    A disease pack that intends to support multiple substages must enumerate those
+    substages explicitly. This conservative rule prevents Stage II from matching
+    Stage III merely because both contain the word 'stage'.
+    """
     if not stage_terms:
         return True
-    represented = _verified_stage_text(case)
+    represented = _canonical_stage_label(_verified_stage_text(case))
     if not represented:
         return False
-    return _text_match(represented, stage_terms)
+    allowed = {
+        label
+        for term in stage_terms
+        if (label := _canonical_stage_label(term)) is not None
+    }
+    return represented in allowed
 
 
 def _verified_molecular_text(case: CancerTumorBoardCase) -> str:

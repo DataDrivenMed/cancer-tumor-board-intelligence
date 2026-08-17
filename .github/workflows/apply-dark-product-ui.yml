@@ -1,0 +1,105 @@
+name: Apply Dark Product UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-dark-product-ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  redesign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply dark research-lab design across product
+        shell: python
+        run: |
+          from pathlib import Path
+
+          # All pages using faculty navigation inherit the dark theme.
+          p = Path('app/faculty_ui.py')
+          t = p.read_text(encoding='utf-8')
+          if 'from app.xai_theme import inject_xai_theme' not in t:
+              t = t.replace('import streamlit as st\n', 'import streamlit as st\n\nfrom app.xai_theme import inject_xai_theme\n', 1)
+          anchor = 'def top_navigation(active: str) -> None:\n'
+          if anchor not in t:
+              raise SystemExit('top_navigation anchor missing')
+          if 'def top_navigation(active: str) -> None:\n    inject_xai_theme()' not in t:
+              t = t.replace(anchor, anchor + '    inject_xai_theme()\n', 1)
+          p.write_text(t, encoding='utf-8')
+
+          # Workspace has its own CSS layer, so explicitly inject overrides after it.
+          p = Path('app/pages/00_Clinical_Workspace.py')
+          t = p.read_text(encoding='utf-8')
+          if 'from app.xai_theme import inject_xai_theme' not in t:
+              t = t.replace('from app.chat_ui import render_governed_chat\n', 'from app.chat_ui import render_governed_chat\nfrom app.xai_theme import inject_xai_theme\n', 1)
+          marker = 'STATUS_LABELS = {'
+          if marker not in t:
+              raise SystemExit('workspace marker missing')
+          if 'inject_xai_theme()\n\n\nSTATUS_LABELS' not in t:
+              t = t.replace(marker, 'inject_xai_theme()\n\n\n' + marker, 1)
+          p.write_text(t, encoding='utf-8')
+
+          # Darken embedded architecture component while retaining category colors.
+          p = Path('app/assets/architecture_interactive.html')
+          t = p.read_text(encoding='utf-8')
+          replacements = {
+              '--paper:#f7f9fc;--white:#fff;--navy:#102a43;': '--paper:#0a0a0a;--white:#141414;--navy:#ffffff;',
+              '--gray:#667383;--grayTint:#eef1f4;--rule:#d7dee7;--text:#243447;--muted:#617184;': '--gray:#7d8187;--grayTint:#191919;--rule:#2a2d31;--text:#dadbdf;--muted:#7d8187;',
+              'body{margin:0;background:var(--paper);color:var(--text);font-family:Arial,Helvetica,sans-serif}': 'body{margin:0;background:var(--paper);color:var(--text);font-family:Inter,Arial,Helvetica,sans-serif}',
+              'border-bottom:1px solid var(--rule);': 'border-bottom:1px solid var(--rule);',
+              '.diagram-shell{position:relative;background:var(--white);': '.diagram-shell{position:relative;background:#0d0d0d;',
+              'box-shadow:0 5px 18px rgba(16,42,67,.06)': 'box-shadow:none',
+              'fill="#fbfdff" stroke="#d7dee7"': 'fill="#0d0d0d" stroke="#2a2d31"',
+              'fill="#fbfffe" stroke="#cfe4e0"': 'fill="#0d0d0d" stroke="#203b36"',
+              'fill="#fdfbff" stroke="#ddd2e4"': 'fill="#0d0d0d" stroke="#392b43"',
+              'fill="#fcfcfd" stroke="#d7dee7"': 'fill="#0d0d0d" stroke="#2a2d31"',
+              'fill="#eaf3fc" stroke="#2e6fb7"': 'fill="#10161c" stroke="#3c8dde"',
+              'fill="#fff0f5" stroke="#b84d71"': 'fill="#1a1014" stroke="#d8587e"',
+              'fill="#fff8e7" stroke="#b57818"': 'fill="#19150d" stroke="#ca8514"',
+              'fill="#eaf8f6" stroke="#13766e"': 'fill="#0e1917" stroke="#239783"',
+              'fill="#f5eff8" stroke="#6a427f"': 'fill="#161119" stroke="#8d62c5"',
+              'fill="#eef1f4" stroke="#aeb8c4"': 'fill="#171719" stroke="#3a3c40"',
+              'class="node-title">': 'class="node-title" fill="#ffffff">',
+              '.node-title{font-size:15px;font-weight:700;fill:var(--navy)}': '.node-title{font-size:15px;font-weight:400;fill:#ffffff}',
+              '.source-label{font-size:10px;fill:#4e5f70}': '.source-label{font-size:10px;fill:#b7bac0}',
+              '.edge{font:600 9px': '.edge{font:400 9px',
+              '.zone{font:700 11px': '.zone{font:400 11px',
+              '.node-num{font:700 10px': '.node-num{font:400 10px',
+              '.legend{display:flex;flex-wrap:wrap;gap:8px 16px;padding:11px 14px;border-top:1px solid var(--rule);font-size:10px;color:#607184}': '.legend{display:flex;flex-wrap:wrap;gap:8px 16px;padding:11px 14px;border-top:1px solid var(--rule);font-size:10px;color:#b7bac0;background:#0d0d0d}',
+              '.notice{margin:0 0 12px;background:#f4f9ff;border:1px solid #bfd7ee;border-radius:10px;padding:10px 12px;color:#294d70;font-size:12px}': '.notice{margin:0 0 12px;background:#111;border:1px solid #2a2d31;border-radius:8px;padding:10px 12px;color:#dadbdf;font-size:12px}',
+              '.meta{text-align:right;max-width:430px;color:var(--muted);font-size:12px;line-height:1.45}': '.meta{text-align:right;max-width:430px;color:#a7a9ad;font-size:12px;line-height:1.45}',
+              '.meta b{color:var(--navy)}': '.meta b{color:#fff}',
+              'h1{margin:0;color:var(--navy);font-size:34px;line-height:1.05;letter-spacing:-.03em}': 'h1{margin:0;color:#fff;font-size:42px;line-height:1.02;letter-spacing:-.045em;font-weight:400}',
+              '.subtitle{margin:8px 0 0;color:var(--blue);': '.subtitle{margin:8px 0 0;color:#dadbdf;',
+              '.footer{display:flex;justify-content:space-between;gap:20px;margin-top:10px;color:#687789;font-size:10px}': '.footer{display:flex;justify-content:space-between;gap:20px;margin-top:10px;color:#7d8187;font-size:10px}',
+          }
+          for old, new in replacements.items():
+              t = t.replace(old, new)
+          p.write_text(t, encoding='utf-8')
+
+          # Ensure dark-theme regression coverage.
+          Path('tests/test_dark_product_ui.py').write_text('''from pathlib import Path\n\n\ndef test_shared_dark_theme_is_wired():\n    theme = Path("app/xai_theme.py").read_text(encoding="utf-8")\n    faculty = Path("app/faculty_ui.py").read_text(encoding="utf-8")\n    workspace = Path("app/pages/00_Clinical_Workspace.py").read_text(encoding="utf-8")\n    overview = Path("app/overview_ui.py").read_text(encoding="utf-8")\n    assert "--x-canvas:#0a0a0a" in theme\n    assert "inject_xai_theme()" in faculty\n    assert "inject_xai_theme()" in workspace\n    assert "inject_xai_theme()" in overview\n\n\ndef test_architecture_uses_dark_canvas():\n    html = Path("app/assets/architecture_interactive.html").read_text(encoding="utf-8")\n    assert "--paper:#0a0a0a" in html\n    assert "background:#0d0d0d" in html\n    assert "Hover over any box" in html\n''', encoding='utf-8')
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate product
+        run: |
+          python -m py_compile app/xai_theme.py app/faculty_ui.py app/overview_ui.py app/pages/00_Clinical_Workspace.py app/architecture_ui.py
+          python -m pytest -q tests/test_dark_product_ui.py tests/test_final_faculty_product.py tests/test_faculty_experience_ui.py tests/test_interactive_architecture.py
+          python -m pytest -q
+
+      - name: Commit redesign
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/faculty_ui.py app/pages/00_Clinical_Workspace.py app/assets/architecture_interactive.html tests/test_dark_product_ui.py
+          git commit -m "Apply dark research-lab UI across product"
+          git push origin HEAD:main

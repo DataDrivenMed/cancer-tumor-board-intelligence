@@ -36,6 +36,7 @@ from app.faculty_ui import (
     research_footer, top_navigation,
 )
 from app.chat_ui import render_governed_chat
+from app.xai_theme import inject_xai_theme
 
 
 st.set_page_config(
@@ -73,6 +74,9 @@ html,body,[class*=css]{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSys
 """,
     unsafe_allow_html=True,
 )
+
+
+inject_xai_theme()
 
 
 STATUS_LABELS = {

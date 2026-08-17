@@ -7,6 +7,8 @@ from typing import Any
 
 import streamlit as st
 
+from app.xai_theme import inject_xai_theme
+
 from services.oncology_programs import PROGRAM_BY_ID, PROGRAMS
 from services.pathway_validation import get_pathway_validation_status
 
@@ -88,6 +90,7 @@ def product_header(mode: str = "Faculty evaluation") -> None:
 
 
 def top_navigation(active: str) -> None:
+    inject_xai_theme()
     cols = st.columns([1,1,1,1,1,2], gap="small")
     links = [
         ("main.py", "Overview", "overview"),

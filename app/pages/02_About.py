@@ -14,7 +14,7 @@ from app.faculty_ui import render_about_page
 st.set_page_config(
     page_title="About · Pan-Oncology Tumor Board Intelligence",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 render_about_page()

@@ -120,6 +120,16 @@ hr{border-color:var(--x-hair)!important}
 /* footer */
 .fx-footer,.footer{border-color:var(--x-hair)!important;color:var(--x-muted)!important}
 
+/* persistent product rail */
+[data-testid="stSidebar"]{display:block!important;background:#0d0d0d!important;border-right:1px solid var(--x-hair)!important;min-width:252px!important;max-width:252px!important}
+[data-testid="stSidebarNav"]{display:none!important}
+[data-testid="stSidebarContent"]{padding:15px 13px 20px!important}
+[data-testid="collapsedControl"]{display:none!important}
+.fx-side-brand{display:flex;align-items:center;gap:10px;padding:4px 3px 16px;border-bottom:1px solid var(--x-hair);margin-bottom:15px}.fx-side-mark{width:32px;height:32px;border-radius:9px;border:1px solid #3a3d43;display:grid;place-items:center;color:#fff;font:600 9px/1 "Geist Mono",monospace}.fx-side-name{font-size:15px;color:#fff;letter-spacing:-.02em}.fx-side-sub{font-size:9px;color:var(--x-muted);margin-top:2px}.fx-side-label{font:500 9px/13px "Geist Mono",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--x-muted);margin:16px 3px 7px}.fx-side-case{border:1px solid var(--x-hair);background:#131416;border-radius:10px;padding:12px;margin-bottom:6px}.fx-side-case strong{display:block;color:#fff;font-size:14px;font-weight:500;line-height:1.3;margin-top:6px}.fx-side-case span{display:block;color:#b5b8be;font-size:10px;line-height:1.45;margin-top:3px}.fx-side-case small{display:block;color:var(--x-muted);font-size:9px;margin-top:7px}.fx-side-live,.fx-side-idle{font:500 8px/11px "Geist Mono",monospace;text-transform:uppercase;letter-spacing:.08em}.fx-side-live{color:#73d0ae}.fx-side-idle{color:#aeb2b8}.fx-side-system{border:1px solid var(--x-hair);background:#111214;border-radius:10px;padding:11px}.fx-side-system div{display:flex;align-items:center;gap:7px;margin:3px 0}.fx-side-system i{width:7px;height:7px;border-radius:50%;background:var(--x-green);display:block}.fx-side-system i.amber{background:var(--x-amber)}.fx-side-system strong{font-size:9px;color:#d4d6db;font-weight:500}.fx-side-system span{display:block;color:var(--x-muted);font-size:8px;line-height:1.4;margin:5px 0 8px}
+[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]{justify-content:flex-start!important;border-radius:8px!important;border-color:transparent!important;min-height:34px!important;padding:.38rem .55rem!important;margin:2px 0!important;color:#bfc2c8!important;background:transparent!important}
+[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]:hover{background:#181a1d!important;border-color:#25282d!important;color:#fff!important}
+[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-disabled="true"]{background:#1a1c20!important;border-color:#31343a!important;color:#fff!important}
+
 /* reduce visual chrome */
 [data-testid="stVerticalBlockBorderWrapper"]{border-color:var(--x-hair)!important}
 

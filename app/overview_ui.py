@@ -7,6 +7,9 @@ import streamlit as st
 
 from app.chat_ui import render_governed_chat
 from app.faculty_ui import faculty_css, research_footer, top_navigation
+from app.xai_theme import inject_xai_theme
+
+PRODUCT_NAME = "Pan-Oncology Tumor Board Intelligence"
 
 
 def _val(obj: Any, key: str, default: Any = None) -> Any:
@@ -69,6 +72,7 @@ def _result_snapshot(result: dict[str, Any]) -> dict[str, str]:
 
 def render_final_overview() -> None:
     faculty_css()
+    inject_xai_theme()
     top_navigation("overview")
 
     st.markdown(

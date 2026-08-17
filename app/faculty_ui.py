@@ -91,7 +91,6 @@ def product_header(mode: str = "Faculty evaluation") -> None:
 
 def top_navigation(active: str) -> None:
     inject_xai_theme()
-    cols = st.columns([1,1,1,1,1,2], gap="small")
     links = [
         ("main.py", "Overview", "overview"),
         ("pages/00_Clinical_Workspace.py", "Workspace", "workspace"),
@@ -99,10 +98,41 @@ def top_navigation(active: str) -> None:
         ("pages/03_Architecture.py", "Architecture", "architecture"),
         ("pages/02_About.py", "About", "about"),
     ]
+
+    with st.sidebar:
+        st.markdown(
+            '<div class="fx-side-brand"><div class="fx-side-mark">TB</div><div><div class="fx-side-name">Pan-Oncology</div><div class="fx-side-sub">Tumor Board Intelligence</div></div></div>',
+            unsafe_allow_html=True,
+        )
+        case = st.session_state.get("case")
+        if case is not None:
+            diagnosis = _txt(_val(getattr(case, "diagnosis", None), "value", None))
+            disease_state = _txt(_val(getattr(case, "disease_state", None), "value", None))
+            case_id = _txt(getattr(case, "case_id", None), "Current case")
+            st.markdown(
+                '<div class="fx-side-label">Current case</div><div class="fx-side-case"><div class="fx-side-live">Active</div>'
+                f'<strong>{escape(diagnosis)}</strong><span>{escape(disease_state)}</span><small>{escape(case_id)}</small></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="fx-side-label">Current case</div><div class="fx-side-case"><div class="fx-side-idle">No active case</div><span>Open the workspace to begin a governed case.</span></div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown('<div class="fx-side-label">Navigate</div>', unsafe_allow_html=True)
+        for page, label, key in links:
+            st.page_link(page, label=label, use_container_width=True, disabled=active == key)
+
+        st.markdown(
+            '<div class="fx-side-label">System</div><div class="fx-side-system"><div><i></i><strong>Research mode</strong></div><span>De-identified or synthetic data only</span><div><i class="amber"></i><strong>Clinical release not established</strong></div></div>',
+            unsafe_allow_html=True,
+        )
+
+    cols = st.columns([1, 1, 1, 1, 1, 2], gap="small")
     for col, (page, label, key) in zip(cols[:5], links):
         with col:
             st.page_link(page, label=label, use_container_width=True, disabled=active == key)
-
 
 def research_footer() -> None:
     st.markdown(

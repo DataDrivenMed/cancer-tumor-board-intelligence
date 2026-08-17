@@ -42,7 +42,7 @@ from app.xai_theme import inject_xai_theme
 st.set_page_config(
     page_title="Tumor Board Intelligence",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 st.markdown(

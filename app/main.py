@@ -14,7 +14,7 @@ from app.overview_ui import render_final_overview
 st.set_page_config(
     page_title="Pan-Oncology Tumor Board Intelligence",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 render_final_overview()

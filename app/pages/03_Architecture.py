@@ -14,7 +14,7 @@ from app.architecture_ui import render_architecture_page
 st.set_page_config(
     page_title="Architecture · Pan-Oncology Tumor Board Intelligence",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 render_architecture_page()

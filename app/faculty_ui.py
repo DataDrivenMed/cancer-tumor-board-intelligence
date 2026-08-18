@@ -67,10 +67,10 @@ def faculty_css() -> None:
 
 [data-testid="stPageLink-NavLink"]{border:1px solid #d8e2ec!important;border-radius:10px!important;padding:.58rem .75rem!important;font-size:13px!important;font-weight:750!important;transition:all .15s ease;background:#f4f8fc!important;color:#23415d!important}
 [data-testid="stPageLink-NavLink"]:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(16,42,67,.06)}
-[data-testid="stPageLink-NavLink"][href*="Clinical_Workspace"]{background:#eaf8f7!important;border-color:#b9dfda!important;color:#176b5d!important}
-[data-testid="stPageLink-NavLink"][href*="Validation"]{background:#f4f0ff!important;border-color:#d9d0f5!important;color:#6749a2!important}
-[data-testid="stPageLink-NavLink"][href*="Architecture"]{background:#fff4e8!important;border-color:#efd2ac!important;color:#8a5a10!important}
-[data-testid="stPageLink-NavLink"][href*="About"]{background:#f1f3f6!important;border-color:#d9dde4!important;color:#4b5968!important}
+[data-testid="stPageLink-NavLink"][href*="Clinical_Workspace"]{background:#181b30!important;border-color:#282c47!important;color:#b7bad2!important}
+[data-testid="stPageLink-NavLink"][href*="Validation"]{background:#181b30!important;border-color:#282c47!important;color:#b7bad2!important}
+[data-testid="stPageLink-NavLink"][href*="Architecture"]{background:#181b30!important;border-color:#282c47!important;color:#b7bad2!important}
+[data-testid="stPageLink-NavLink"][href*="About"]{background:#181b30!important;border-color:#282c47!important;color:#b7bad2!important}
 [data-testid="stPageLink-NavLink"][aria-disabled="true"]{box-shadow:inset 0 0 0 2px currentColor!important;opacity:1!important}
 
 </style>

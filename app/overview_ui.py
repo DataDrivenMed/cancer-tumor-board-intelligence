@@ -33,6 +33,7 @@ def _case_snapshot(case: Any) -> dict[str, str]:
     diagnosis = _txt(_val(getattr(case, "diagnosis", None), "value", None))
     disease_state = _txt(_val(getattr(case, "disease_state", None), "value", None))
     case_id = _txt(getattr(case, "case_id", None), "Current case")
+    question = _txt(_val(getattr(case, "clinical_question", None), "question", None))
     mols = getattr(case, "molecular_findings", []) or []
     molecular = "Not documented"
     if mols:
@@ -49,6 +50,7 @@ def _case_snapshot(case: Any) -> dict[str, str]:
         "diagnosis": diagnosis,
         "disease_state": disease_state,
         "case_id": case_id,
+        "question": question,
         "molecular": molecular,
     }
 
@@ -78,26 +80,22 @@ def render_final_overview() -> None:
     st.markdown(
         """
 <style>
-:root{
-  --ov-bg:#0a0a0a;--ov-panel:#111214;--ov-panel2:#151619;--ov-line:#292c31;
-  --ov-ink:#f7f7f5;--ov-body:#c7c9ce;--ov-muted:#7f838b;--ov-green:#35b88a;
-  --ov-blue:#3c8dde;--ov-rose:#d8587e;--ov-amber:#ca8514;--ov-teal:#239783;--ov-plum:#8d62c5;
-}
-.block-container{max-width:1780px!important;padding:1rem 1.3rem 3rem!important}
-.ov-rail-title{font:500 10px/14px "Geist Mono","IBM Plex Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ov-muted);margin:2px 0 9px}
-.ov-rail-card{background:var(--ov-panel);border:1px solid var(--ov-line);border-radius:12px;padding:15px;margin-bottom:11px}
-.ov-case-status{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px}.ov-case-status b{font-size:11px;color:var(--ov-body);font-weight:500}.ov-live{display:inline-flex;align-items:center;gap:6px;font-size:10px;color:#9ce0c4}.ov-live:before{content:"";width:7px;height:7px;border-radius:999px;background:var(--ov-green);box-shadow:0 0 0 3px rgba(53,184,138,.10)}
-.ov-case-name{font-size:22px;line-height:1.08;color:var(--ov-ink);letter-spacing:-.035em;margin-bottom:7px}.ov-case-meta{font-size:11px;color:var(--ov-muted);line-height:1.5}.ov-rail-copy{font-size:12px;line-height:1.55;color:var(--ov-body);margin:0}
-.ov-status-line{display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #202226}.ov-status-line:last-child{border-bottom:0}.ov-status-dot{width:7px;height:7px;border-radius:50%;background:var(--ov-green);margin-top:5px;flex:none}.ov-status-line strong{font-size:11px;color:var(--ov-ink);font-weight:500;display:block}.ov-status-line span{font-size:10px;color:var(--ov-muted);display:block;margin-top:2px;line-height:1.4}
-.ov-hero{padding:26px 0 22px;border-bottom:1px solid var(--ov-line);margin-bottom:18px}.ov-kicker{font:500 10px/14px "Geist Mono","IBM Plex Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ov-body);margin-bottom:10px}.ov-hero h1{font-size:58px!important;line-height:.98!important;letter-spacing:-2.25px!important;color:var(--ov-ink)!important;margin:0!important;font-weight:400!important}.ov-lede{font-size:15px;line-height:1.6;color:var(--ov-body);max-width:880px;margin-top:15px}.ov-badges{display:flex;gap:7px;flex-wrap:wrap;margin-top:15px}.ov-badge{display:inline-flex;padding:5px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.22);font-size:10px;color:var(--ov-body)}
-.ov-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:0 0 18px}.ov-metric{background:var(--ov-panel);border:1px solid var(--ov-line);border-radius:11px;padding:14px;min-height:101px}.ov-metric .label{font:500 9px/13px "Geist Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ov-muted)}.ov-metric .value{font-size:25px;color:var(--ov-ink);letter-spacing:-.6px;margin-top:9px}.ov-metric .note{font-size:10px;line-height:1.4;color:var(--ov-muted);margin-top:5px}
-.ov-panel{background:var(--ov-panel);border:1px solid var(--ov-line);border-radius:12px;padding:16px;margin-bottom:12px}.ov-panel-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:13px}.ov-panel-head h2{font-size:20px!important;letter-spacing:-.4px!important;margin:0!important;color:var(--ov-ink)!important}.ov-panel-head p{font-size:10px;line-height:1.45;color:var(--ov-muted);margin:4px 0 0}.ov-mini-label{font:500 9px/13px "Geist Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ov-muted)}
-.ov-flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;align-items:stretch}.ov-node{position:relative;background:var(--ov-panel2);border:1px solid var(--ov-line);border-radius:10px;padding:11px;min-height:92px}.ov-node:after{content:"→";position:absolute;right:-10px;top:37px;color:#62666e;z-index:3}.ov-node:last-child:after{display:none}.ov-node .num{font:500 9px/12px "Geist Mono",monospace;color:var(--ov-muted);margin-bottom:10px}.ov-node strong{font-size:11px;line-height:1.35;color:var(--ov-ink);font-weight:500;display:block}.ov-node.blue{border-top:2px solid var(--ov-blue)}.ov-node.rose{border-top:2px solid var(--ov-rose)}.ov-node.amber{border-top:2px solid var(--ov-amber)}.ov-node.teal{border-top:2px solid var(--ov-teal)}.ov-node.plum{border-top:2px solid var(--ov-plum)}
-.ov-lower{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ov-summary-row{padding:9px 0;border-bottom:1px solid #22252a}.ov-summary-row:last-child{border-bottom:0}.ov-summary-row span{display:block;font:500 9px/12px "Geist Mono",monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--ov-muted)}.ov-summary-row strong{display:block;font-size:13px;line-height:1.4;color:var(--ov-ink);font-weight:500;margin-top:4px}.ov-evidence-row{display:flex;justify-content:space-between;gap:9px;padding:10px 0;border-bottom:1px solid #22252a;align-items:center}.ov-evidence-row:last-child{border-bottom:0}.ov-evidence-row span{font-size:11px;color:var(--ov-body)}.ov-count{min-width:30px;text-align:center;border-radius:999px;border:1px solid #34373d;padding:3px 7px;font-size:9px;color:var(--ov-ink)}
-.ov-assistant{background:var(--ov-panel);border:1px solid var(--ov-line);border-radius:12px;padding:14px;position:sticky;top:68px}.ov-assistant h3{font-size:21px!important;margin:0!important;color:var(--ov-ink)!important;font-weight:400!important}.ov-assistant-sub{font-size:11px;line-height:1.5;color:var(--ov-muted);margin:5px 0 12px}.ov-empty{background:#0f1012;border:1px solid #23262a;border-radius:10px;padding:12px;font-size:11px;line-height:1.55;color:var(--ov-body)}
-[data-testid="stPageLink-NavLink"]{border-radius:999px!important;font-size:11px!important;min-height:36px!important;padding:.4rem .72rem!important}
-@media(max-width:1180px){.ov-flow{grid-template-columns:repeat(3,1fr)}.ov-node:nth-child(3):after,.ov-node:last-child:after{display:none}.ov-metrics{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:900px){.ov-hero h1{font-size:44px!important}.ov-lower{grid-template-columns:1fr}.ov-flow{grid-template-columns:repeat(2,1fr)}.ov-node:after{display:none}}
+.ov-shell{max-width:1200px;margin:0 auto}
+.ov-hero{padding:58px 0 48px;border-bottom:1px solid var(--x-hair)}
+.ov-kicker{font-size:11px;margin-bottom:14px}.ov-hero h1{font-size:68px!important;line-height:1.03!important;letter-spacing:-2.0px!important;margin:0!important;max-width:980px}.ov-lede{font-size:18px;line-height:1.55;color:var(--x-body);max-width:860px;margin:20px 0 0}.ov-hero-note{font-size:13px;line-height:1.55;color:var(--x-muted);max-width:820px;margin-top:12px}
+.ov-section{font-size:36px!important;line-height:1.15!important;letter-spacing:-.72px!important;margin:0 0 10px!important}.ov-sub{font-size:15px;line-height:1.6;color:var(--x-body);max-width:840px;margin:0 0 22px}.ov-band{padding:70px 0;border-bottom:1px solid var(--x-hair)}
+.ov-grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.ov-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.ov-grid5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.ov-card{background:#fff;border:1px solid var(--x-hair);border-radius:12px;padding:22px}.ov-card h3{font-size:18px!important;line-height:1.35!important;font-weight:600!important;margin:0 0 8px!important}.ov-card p{font-size:14px;line-height:1.55;color:var(--x-body);margin:0}.ov-card .ov-label{font-size:10px;margin-bottom:12px;color:var(--x-muted)}
+.ov-agents{background:#fff;border:1px solid var(--x-hair);border-radius:12px;padding:24px;display:grid;grid-template-columns:.92fr 1.08fr;gap:28px;align-items:start}.ov-agents h3{font-size:26px!important;line-height:1.25!important;letter-spacing:-.32px!important;margin:0 0 10px!important}.ov-agents p{font-size:15px;line-height:1.6;color:var(--x-body);margin:0}.ov-agent-list{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ov-agent-item{background:var(--x-canvas-soft);border:1px solid var(--x-hair-soft);border-radius:8px;padding:11px}.ov-agent-item strong{font-size:12px;color:var(--x-ink);display:block}.ov-agent-item span{font-size:11px;line-height:1.45;color:var(--x-muted);display:block;margin-top:3px}
+.ov-timeline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:18px 0 6px}.ov-pill{display:inline-flex;align-items:center;justify-content:center;padding:6px 11px;border-radius:9999px;color:var(--x-ink);font:600 10px/1.2 "JetBrains Mono",ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em}.thinking{background:var(--x-thinking)}.grep{background:var(--x-grep)}.read{background:var(--x-read)}.edit{background:var(--x-edit)}.done{background:var(--x-done);color:#fff}.ov-arrow{color:var(--x-muted);font-size:14px}
+.ov-step{background:#fff;border:1px solid var(--x-hair);border-radius:12px;padding:18px;min-height:160px}.ov-step-num{font:600 10px/1.2 "JetBrains Mono",monospace;color:var(--x-primary);letter-spacing:.08em;margin-bottom:16px}.ov-step strong{font-size:16px;color:var(--x-ink);display:block}.ov-step span{font-size:12px;line-height:1.5;color:var(--x-body);display:block;margin-top:7px}
+.ov-clinician{background:var(--x-ink);border-radius:12px;padding:25px;color:var(--x-canvas)}.ov-clinician h3{color:var(--x-canvas)!important;font-size:26px!important;margin:0 0 9px!important}.ov-clinician p{color:#d8d5cc;font-size:14px;line-height:1.6;margin:0}.ov-clinician-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}.ov-clinician-item{border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:12px}.ov-clinician-item strong{color:#fff;display:block;font-size:12px}.ov-clinician-item span{color:#c8c5bc;font-size:10px;line-height:1.45;display:block;margin-top:4px}
+.ov-safeguard{display:flex;gap:12px;align-items:flex-start;padding:15px 0;border-bottom:1px solid var(--x-hair)}.ov-safeguard:last-child{border-bottom:0}.ov-safeguard-index{width:26px;height:26px;flex:none;border-radius:9999px;background:var(--x-canvas-soft);border:1px solid var(--x-hair);display:grid;place-items:center;font:600 9px/1 "JetBrains Mono",monospace;color:var(--x-muted)}.ov-safeguard strong{font-size:14px;color:var(--x-ink);display:block}.ov-safeguard span{font-size:12px;line-height:1.5;color:var(--x-body);display:block;margin-top:3px}
+.ov-preview{background:#fff;border:1px solid var(--x-hair);border-radius:12px;overflow:hidden}.ov-preview-head{padding:16px 18px;border-bottom:1px solid var(--x-hair);display:flex;justify-content:space-between;gap:12px;align-items:center}.ov-preview-head strong{font-size:15px;color:var(--x-ink)}.ov-preview-head span{font-size:10px;color:var(--x-muted)}.ov-preview-grid{display:grid;grid-template-columns:repeat(2,1fr)}.ov-preview-cell{padding:16px 18px;border-bottom:1px solid var(--x-hair-soft)}.ov-preview-cell:nth-child(odd){border-right:1px solid var(--x-hair-soft)}.ov-preview-cell span{display:block;font:600 9px/1.3 "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.07em;color:var(--x-muted)}.ov-preview-cell strong{display:block;font-size:14px;line-height:1.4;color:var(--x-ink);margin-top:6px;font-weight:500}.ov-empty{padding:18px;font-size:13px;line-height:1.6;color:var(--x-body);background:var(--x-canvas-soft)}
+.ov-assistant-wrap{position:sticky;top:78px}.ov-assistant-intro{background:#fff;border:1px solid var(--x-hair);border-radius:12px;padding:18px;margin-bottom:10px}.ov-assistant-intro h3{font-size:22px!important;margin:0!important}.ov-assistant-intro p{font-size:12px;line-height:1.55;color:var(--x-body);margin:7px 0 0}.ov-assistant-state{margin-top:10px;padding:10px;border-radius:8px;background:var(--x-canvas-soft);border:1px solid var(--x-hair-soft);font-size:11px;line-height:1.5;color:var(--x-muted)}
+.ov-cta{padding:64px 0 20px;text-align:center}.ov-cta h2{font-size:36px!important;letter-spacing:-.72px!important;margin:0 0 10px!important}.ov-cta p{font-size:14px;color:var(--x-body);margin:0 auto 18px;max-width:720px}
+@media(max-width:1050px){.ov-grid5{grid-template-columns:repeat(2,1fr)}.ov-grid3{grid-template-columns:1fr}.ov-agents{grid-template-columns:1fr}.ov-clinician-grid{grid-template-columns:1fr}.ov-hero h1{font-size:54px!important}}
+@media(max-width:700px){.ov-grid2,.ov-preview-grid,.ov-agent-list,.ov-grid5{grid-template-columns:1fr}.ov-preview-cell:nth-child(odd){border-right:0}.ov-hero{padding-top:34px}.ov-hero h1{font-size:38px!important}.ov-band{padding:48px 0}}
 </style>
 """,
         unsafe_allow_html=True,
@@ -108,119 +106,123 @@ def render_final_overview() -> None:
     case_snapshot = _case_snapshot(case) if case is not None else None
     result_snapshot = _result_snapshot(result) if result else None
 
-    left, center, right = st.columns([0.78, 2.35, 1.02], gap="large")
+    main, assistant = st.columns([2.5, 1.0], gap="large")
 
-    with left:
-        st.markdown('<div class="ov-rail-title">Current case</div>', unsafe_allow_html=True)
+    with main:
+        st.markdown(
+            '<div class="ov-shell"><section class="ov-hero">'
+            '<div class="ov-kicker">Multidisciplinary cancer decision support</div>'
+            '<h1>Bring the case, the evidence, and the challenge into one reviewable workflow.</h1>'
+            '<div class="ov-lede">Pan-Oncology Tumor Board Intelligence is a research decision-support workspace designed to help a multidisciplinary tumor board structure a complex case, identify what is missing, review distinct evidence channels, challenge the emerging synthesis, and prepare an auditable brief for discussion.</div>'
+            '<div class="ov-hero-note">It does not replace the tumor board, make autonomous treatment decisions, or turn an AI response into clinical truth. The goal is to make the information around multidisciplinary judgment easier to review.</div>'
+            '</section></div>',
+            unsafe_allow_html=True,
+        )
+
+        cta1, cta2, cta3 = st.columns([1.1, 1.35, 1.2], gap="small")
+        with cta1:
+            st.page_link("pages/00_Clinical_Workspace.py", label="Start a new case", use_container_width=True)
+        with cta2:
+            st.page_link("pages/00_Clinical_Workspace.py", label="Try the synthetic demonstration", use_container_width=True)
+        with cta3:
+            st.page_link("pages/03_Architecture.py", label="See how the agents work", use_container_width=True)
+
+        st.markdown(
+            '<section class="ov-band"><div class="ov-kicker">Why this may help</div><h2 class="ov-section">Tumor boards already integrate many kinds of expertise. The software should do the same without hiding the boundaries.</h2>'
+            '<p class="ov-sub">The platform is organized around common tumor-board friction points: information scattered across the case, decision-critical gaps, different evidence types being mixed together, current literature and trial retrieval, and the need to see what could weaken or change a proposed management direction.</p>'
+            '<div class="ov-grid3">'
+            '<div class="ov-card"><div class="ov-label">Before discussion</div><h3>Structure the case</h3><p>Bring diagnosis, disease state, stage when explicitly represented, treatment history, molecular findings, performance status, and the clinical question into one source-traced case view.</p></div>'
+            '<div class="ov-card"><div class="ov-label">During review</div><h3>Keep evidence channels distinct</h3><p>Guidelines, molecular evidence, literature, clinical trials, safety, and translational biology remain separately labeled so one source type does not silently substitute for another.</p></div>'
+            '<div class="ov-card"><div class="ov-label">Before synthesis</div><h3>Challenge what looks persuasive</h3><p>Missing information, conflicts, unsupported leaps, and recommendation-blocking weaknesses are surfaced before the system presents a consensus state.</p></div>'
+            '</div></section>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            '<section class="ov-band"><div class="ov-kicker">New concept: AI agents</div><div class="ov-agents"><div><h3>What is an AI agent in this system?</h3><p>Instead of asking one AI model to do everything, the tumor-board task is divided into specialized agents with defined jobs. One agent may check whether the represented case is internally consistent. Another identifies missing information. Others review a bounded evidence channel. A separate challenge step looks for weaknesses before consensus. The agents share the governed case state, but they do not independently make the final clinical decision.</p>'
+            '<div class="ov-timeline"><span class="ov-pill thinking">Case</span><span class="ov-arrow">→</span><span class="ov-pill grep">Verify</span><span class="ov-arrow">→</span><span class="ov-pill read">Evidence</span><span class="ov-arrow">→</span><span class="ov-pill edit">Specialists</span><span class="ov-arrow">→</span><span class="ov-pill thinking">Challenge</span><span class="ov-arrow">→</span><span class="ov-pill done">Consensus</span></div></div>'
+            '<div class="ov-agent-list">'
+            '<div class="ov-agent-item"><strong>Case integrity</strong><span>Checks the represented case before reasoning proceeds.</span></div>'
+            '<div class="ov-agent-item"><strong>Missing information</strong><span>Identifies absent, pending, or conflicting facts that may matter.</span></div>'
+            '<div class="ov-agent-item"><strong>Evidence specialists</strong><span>Review governed guideline, molecular, literature, trial, safety, and translational channels.</span></div>'
+            '<div class="ov-agent-item"><strong>Clinical Red Team</strong><span>Challenges assumptions, evidence sufficiency, and unsupported recommendation logic.</span></div>'
+            '<div class="ov-agent-item"><strong>Consensus engine</strong><span>Synthesizes only after required gates and challenge review are satisfied.</span></div>'
+            '<div class="ov-agent-item"><strong>Tumor board brief</strong><span>Presents the governed result without inventing new clinical claims.</span></div>'
+            '</div></div></section>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            '<section class="ov-band"><div class="ov-kicker">How to use the application</div><h2 class="ov-section">Five steps from case intake to tumor-board brief.</h2><p class="ov-sub">Every stage of the workspace also includes a short “What to do here” instruction. You do not need to understand the technical architecture to use the workflow.</p>'
+            '<div class="ov-grid5">'
+            '<div class="ov-step"><div class="ov-step-num">01</div><strong>Add the case</strong><span>Use the synthetic demonstration, paste a de-identified narrative, or upload a supported de-identified document.</span></div>'
+            '<div class="ov-step"><div class="ov-step-num">02</div><strong>Review what was captured</strong><span>Confirm that the structured case matches the source. Correct representation errors before continuing.</span></div>'
+            '<div class="ov-step"><div class="ov-step-num">03</div><strong>Review evidence</strong><span>Inspect the retrieved bounded source candidates and attest only records you have actually reviewed.</span></div>'
+            '<div class="ov-step"><div class="ov-step-num">04</div><strong>Run agent analysis</strong><span>The governed workflow checks integrity, missingness, specialist evidence, challenge findings, and consensus.</span></div>'
+            '<div class="ov-step"><div class="ov-step-num">05</div><strong>Discuss the brief</strong><span>Review decision state, evidence, missing information, uncertainty, challenge findings, and what could change the conclusion.</span></div>'
+            '</div></section>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            '<section class="ov-band"><div class="ov-clinician"><h3>What remains with the clinicians?</h3><p>The system is designed to organize and challenge information around multidisciplinary judgment. Clinical interpretation, patient-specific applicability, final recommendations, communication with the patient, and treatment decisions remain with the treating clinicians and tumor board.</p>'
+            '<div class="ov-clinician-grid"><div class="ov-clinician-item"><strong>Verify the represented case</strong><span>The team decides whether the structured case accurately reflects the source record.</span></div><div class="ov-clinician-item"><strong>Judge applicability</strong><span>Retrieved evidence is not automatically applicable to the individual patient.</span></div><div class="ov-clinician-item"><strong>Make the clinical decision</strong><span>The brief supports discussion. It does not replace multidisciplinary judgment.</span></div></div></div></section>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('<section class="ov-band"><div class="ov-kicker">Current workspace preview</div><h2 class="ov-section">A readable snapshot before deeper review.</h2><p class="ov-sub">When a case is active, this area reflects the governed session state. When no case is loaded, it stays empty rather than showing demonstration data as if it were current clinical information.</p>', unsafe_allow_html=True)
         if case_snapshot:
-            st.markdown(
-                '<div class="ov-rail-card"><div class="ov-case-status"><b>CASE IN SESSION</b><span class="ov-live">Active</span></div>'
-                f'<div class="ov-case-name">{escape(case_snapshot["diagnosis"])}</div>'
-                f'<div class="ov-case-meta">{escape(case_snapshot["disease_state"])}<br>{escape(case_snapshot["case_id"])}</div></div>',
-                unsafe_allow_html=True,
-            )
-            st.page_link("pages/00_Clinical_Workspace.py", label="View case workspace", use_container_width=True)
-        else:
-            st.markdown(
-                '<div class="ov-rail-card"><div class="ov-case-status"><b>NO ACTIVE CASE</b></div>'
-                '<p class="ov-rail-copy">Start in the clinical workspace or load the synthetic demonstration case. Nothing is inferred on this screen before a governed case exists.</p></div>',
-                unsafe_allow_html=True,
-            )
-            st.page_link("pages/00_Clinical_Workspace.py", label="Start a case", use_container_width=True)
-
-        st.markdown('<div class="ov-rail-title" style="margin-top:18px">Workspace</div>', unsafe_allow_html=True)
-        st.page_link("pages/00_Clinical_Workspace.py", label="Clinical workspace", use_container_width=True)
-        st.page_link("pages/03_Architecture.py", label="Architecture", use_container_width=True)
-        st.page_link("pages/01_Validation.py", label="Validation", use_container_width=True)
-        st.page_link("pages/02_About.py", label="Scientific scope", use_container_width=True)
-
-        st.markdown('<div class="ov-rail-title" style="margin-top:18px">System status</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="ov-rail-card">'
-            '<div class="ov-status-line"><div class="ov-status-dot"></div><div><strong>Research workspace</strong><span>Available for governed demonstration and faculty evaluation.</span></div></div>'
-            '<div class="ov-status-line"><div class="ov-status-dot"></div><div><strong>Common-core qualification</strong><span>Synthetic architecture qualification passed.</span></div></div>'
-            '<div class="ov-status-line"><div class="ov-status-dot" style="background:#ca8514"></div><div><strong>Clinical release</strong><span>Not established. Disease-specific clinical validation remains separate.</span></div></div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-    with center:
-        st.markdown(
-            '<div class="ov-hero"><div class="ov-kicker">Governed multi-agent oncology intelligence</div>'
-            '<h1>Pan-Oncology<br>Tumor Board Intelligence</h1>'
-            '<div class="ov-lede">A multidisciplinary cancer-review workspace that keeps case representation, evidence retrieval, missingness, challenge, consensus, and final presentation visibly separate.</div>'
-            '<div class="ov-badges"><span class="ov-badge">Pan-oncology</span><span class="ov-badge">Bounded evidence</span><span class="ov-badge">Clinical Red Team</span><span class="ov-badge">Human review</span><span class="ov-badge">Auditable outputs</span></div></div>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            '<div class="ov-metrics">'
-            '<div class="ov-metric"><div class="label">Oncology programs</div><div class="value">14</div><div class="note">Registered disease programs</div></div>'
-            '<div class="ov-metric"><div class="label">Specialist evidence agents</div><div class="value">6</div><div class="note">Guideline · Molecular · Literature · Translational · Trials · Safety</div></div>'
-            '<div class="ov-metric"><div class="label">Common-core qualification</div><div class="value">Passed</div><div class="note">Synthetic software and architecture gate</div></div>'
-            '<div class="ov-metric"><div class="label">Clinical release</div><div class="value">Research</div><div class="note">Disease-specific clinical validation remains future work</div></div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            '<div class="ov-panel"><div class="ov-panel-head"><div><h2>Multi-agent architecture</h2><p>Compact workflow orientation. The Architecture page retains the complete interactive handoff map.</p></div><div class="ov-mini-label">Fail closed by design</div></div>'
-            '<div class="ov-flow">'
-            '<div class="ov-node blue"><div class="num">01-02</div><strong>Case intake<br>+ extraction</strong></div>'
-            '<div class="ov-node rose"><div class="num">03-04</div><strong>Confirmation<br>+ correction</strong></div>'
-            '<div class="ov-node amber"><div class="num">05-08</div><strong>Integrity<br>+ missingness</strong></div>'
-            '<div class="ov-node blue"><div class="num">09</div><strong>Clinical<br>router</strong></div>'
-            '<div class="ov-node teal"><div class="num">10A-10F</div><strong>Specialist<br>agents</strong></div>'
-            '<div class="ov-node plum"><div class="num">11-15</div><strong>Join · Red Team<br>consensus · brief</strong></div>'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.page_link("pages/03_Architecture.py", label="Open full interactive architecture", use_container_width=True)
-
-        if case_snapshot:
-            specialist_count = result_snapshot["specialists"] if result_snapshot else "0"
             decision = result_snapshot["decision"] if result_snapshot else "Analysis not yet completed"
-            challenge = result_snapshot["red_team"] if result_snapshot else "Not reached"
             missing = result_snapshot["missing"] if result_snapshot else "Run the governed workflow to classify decision-critical missing information."
             st.markdown(
-                '<div class="ov-lower">'
-                '<div class="ov-panel"><div class="ov-panel-head"><div><h2>30-second Tumor Board View</h2><p>Current represented case only.</p></div></div>'
-                f'<div class="ov-summary-row"><span>Diagnosis</span><strong>{escape(case_snapshot["diagnosis"])}</strong></div>'
-                f'<div class="ov-summary-row"><span>Disease state</span><strong>{escape(case_snapshot["disease_state"])}</strong></div>'
-                f'<div class="ov-summary-row"><span>Molecular</span><strong>{escape(case_snapshot["molecular"])}</strong></div>'
-                f'<div class="ov-summary-row"><span>Decision state</span><strong>{escape(decision)}</strong></div>'
-                '</div>'
-                '<div class="ov-panel"><div class="ov-panel-head"><div><h2>Governed analysis state</h2><p>These statuses are kept separate rather than collapsed into one score.</p></div></div>'
-                f'<div class="ov-evidence-row"><span>Specialist outputs present</span><div class="ov-count">{escape(specialist_count)}</div></div>'
-                f'<div class="ov-evidence-row"><span>Challenge review</span><div class="ov-count">{escape(challenge)}</div></div>'
-                f'<div class="ov-summary-row"><span>Missing information</span><strong>{escape(missing)}</strong></div>'
+                '<div class="ov-preview"><div class="ov-preview-head"><strong>Current case</strong><span>Session data</span></div><div class="ov-preview-grid">'
+                f'<div class="ov-preview-cell"><span>Diagnosis</span><strong>{escape(case_snapshot["diagnosis"])}</strong></div>'
+                f'<div class="ov-preview-cell"><span>Disease state</span><strong>{escape(case_snapshot["disease_state"])}</strong></div>'
+                f'<div class="ov-preview-cell"><span>Molecular</span><strong>{escape(case_snapshot["molecular"])}</strong></div>'
+                f'<div class="ov-preview-cell"><span>Decision state</span><strong>{escape(decision)}</strong></div>'
+                f'<div class="ov-preview-cell"><span>Tumor board question</span><strong>{escape(case_snapshot["question"])}</strong></div>'
+                f'<div class="ov-preview-cell"><span>Missing information</span><strong>{escape(missing)}</strong></div>'
                 '</div></div>',
                 unsafe_allow_html=True,
             )
         else:
-            st.markdown(
-                '<div class="ov-lower">'
-                '<div class="ov-panel"><div class="ov-panel-head"><div><h2>30-second Tumor Board View</h2><p>Populates from the active governed case.</p></div></div><div class="ov-empty">No case has been loaded in this session. The overview intentionally remains empty rather than displaying demonstration values as if they were current patient facts.</div></div>'
-                '<div class="ov-panel"><div class="ov-panel-head"><div><h2>Evidence state</h2><p>Channel-level evidence appears after case review and analysis.</p></div></div><div class="ov-empty">Guideline, molecular, literature, clinical-trial, safety, and translational outputs remain independently labeled once the workflow reaches them.</div></div>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown('<div class="ov-preview"><div class="ov-empty">No active case. Open the Clinical Workspace to start a new case or use the synthetic demonstration to learn the workflow.</div></div>', unsafe_allow_html=True)
+        st.markdown('</section>', unsafe_allow_html=True)
 
-    with right:
-        st.markdown('<div class="ov-assistant"><h3>Ask Tumor Board</h3><div class="ov-assistant-sub">Governed follow-up questions stay bounded to the structured case and available evidence.</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<section class="ov-band"><div class="ov-kicker">Scientific safeguards</div><h2 class="ov-section">The guardrails are part of the product, not a disclaimer at the end.</h2>'
+            '<div class="ov-safeguard"><div class="ov-safeguard-index">01</div><div><strong>Source-grounded representation</strong><span>Confirmed extracted assertions require traceable source context.</span></div></div>'
+            '<div class="ov-safeguard"><div class="ov-safeguard-index">02</div><div><strong>Missing information stays missing</strong><span>The system does not silently fill decision-critical gaps from model memory.</span></div></div>'
+            '<div class="ov-safeguard"><div class="ov-safeguard-index">03</div><div><strong>Evidence channels remain distinct</strong><span>Guideline, molecular, literature, trial, safety, and translational evidence retain their own status and limitations.</span></div></div>'
+            '<div class="ov-safeguard"><div class="ov-safeguard-index">04</div><div><strong>Challenge before consensus</strong><span>An explicit adversarial review step looks for conflicts, unsupported leaps, and recommendation-blocking weaknesses.</span></div></div>'
+            '<div class="ov-safeguard"><div class="ov-safeguard-index">05</div><div><strong>Abstention is a valid output</strong><span>If the evidence or represented case cannot support synthesis, the system can stop rather than force a recommendation.</span></div></div>'
+            '<div class="ov-safeguard"><div class="ov-safeguard-index">06</div><div><strong>Clinician judgment remains central</strong><span>The output is a decision-support artifact for multidisciplinary review, not autonomous oncology care.</span></div></div>'
+            '</section>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            '<section class="ov-cta"><div class="ov-kicker">Explore further</div><h2>Use the workspace first. Open the architecture when you want the technical detail.</h2><p>The architecture page preserves the full interactive agent map, handoffs, safety boundaries, and click/hover explanations. Validation remains a separate question from software qualification.</p></section>',
+            unsafe_allow_html=True,
+        )
+        a1, a2, a3 = st.columns(3, gap="small")
+        with a1:
+            st.page_link("pages/00_Clinical_Workspace.py", label="Enter Clinical Workspace", use_container_width=True)
+        with a2:
+            st.page_link("pages/03_Architecture.py", label="Explore Agent Architecture", use_container_width=True)
+        with a3:
+            st.page_link("pages/01_Validation.py", label="Review Validation Status", use_container_width=True)
+
+    with assistant:
+        st.markdown('<div class="ov-assistant-wrap"><div class="ov-assistant-intro"><div class="ov-kicker">Case-grounded assistant</div><h3>Ask Tumor Board</h3><p>This panel is intentionally not a general oncology chatbot. It becomes useful only when there is a governed case and analysis result to query.</p>', unsafe_allow_html=True)
         if case is not None and result:
+            st.markdown('<div class="ov-assistant-state"><strong>Ready.</strong> Ask about the represented case, evidence, missing information, challenge findings, trials, safety, rationale, or what could change the decision.</div></div></div>', unsafe_allow_html=True)
             render_governed_chat(result, case, key_prefix="overview")
         elif case is not None:
-            st.markdown(
-                '<div class="ov-empty">A case is active, but governed analysis has not produced a result yet. Complete evidence review and analysis before asking the assistant to synthesize specialist outputs.</div>',
-                unsafe_allow_html=True,
-            )
-            st.page_link("pages/00_Clinical_Workspace.py", label="Continue case analysis", use_container_width=True)
+            st.markdown('<div class="ov-assistant-state"><strong>Case loaded, analysis not complete.</strong> Continue through evidence review and agent analysis before using this panel for synthesis.</div></div></div>', unsafe_allow_html=True)
+            st.page_link("pages/00_Clinical_Workspace.py", label="Continue the case", use_container_width=True)
         else:
-            st.markdown(
-                '<div class="ov-empty">The assistant is disabled until a governed case exists. This prevents a general-purpose chat surface from appearing to provide oncology recommendations outside the case workflow.</div>',
-                unsafe_allow_html=True,
-            )
-            st.page_link("pages/00_Clinical_Workspace.py", label="Open clinical workspace", use_container_width=True)
+            st.markdown('<div class="ov-assistant-state"><strong>Not active yet.</strong> Start a case or open the synthetic demonstration first. This prevents the assistant from appearing to answer outside the governed tumor-board workflow.</div></div></div>', unsafe_allow_html=True)
+            st.page_link("pages/00_Clinical_Workspace.py", label="Open Clinical Workspace", use_container_width=True)
 
     research_footer()

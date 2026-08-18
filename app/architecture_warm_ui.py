@@ -60,7 +60,7 @@ def render_warm_architecture_graph() -> None:
         ["source available", "structured case", "human confirmation", "integrity passed", "missingness classified", "case ready"],
     )
     specialists = ''.join(_node_button(node_id) for node_id in ["guideline", "molecular", "literature", "translational", "trials", "safety"])
-    stage3 = _row(["join", "redteam", "consensus", "brief"], ["evidence stack", "challenge findings", "consensus permitted"])
+    stage3 = _row(["join", "redteam", "consensus"], ["evidence stack", "challenge findings"])
     stage4 = _row(["brief", "outputs"], ["governed brief rendered"])
 
     html = f'''<!doctype html>
@@ -84,7 +84,7 @@ def render_warm_architecture_graph() -> None:
 <div class="aw-help"><b>How to use this diagram:</b> hover over a node for a quick explanation. Click or tap a node to pin its purpose, inputs, outputs, safety boundary, and handoff logic below the diagram.</div>
 <div class="aw-lane"><div class="aw-lane-head"><strong>Case representation, integrity and routing</strong><span>01 / Before specialist reasoning</span></div><div class="aw-scroll">{stage1}</div><div class="aw-branches"><div class="aw-branch"><b>Correction branch:</b> if clinician review identifies a representation mismatch, the case moves through <b>Case Correction Gate</b> and then returns to integrity review.<br><br>{_node_button("correction")}</div><div class="aw-branch"><b>Clarification branch:</b> when recommendation-blocking information is unresolved, the workflow uses <b>Apply Clarification</b> and rechecks the case before routing.<br><br>{_node_button("apply")}</div></div><div class="aw-human"><span class="pill">HUMAN</span><div>Clinician review is explicit at case confirmation/correction and wherever source candidates require local attestation. Human review does not convert unsupported information into clinical truth.</div></div></div>
 <div class="aw-lane"><div class="aw-lane-head"><strong>Parallel governed specialist agents</strong><span>02 / Bounded evidence channels</span></div><div class="aw-scroll"><div class="aw-specialists">{specialists}</div></div><div class="aw-human"><span class="pill">EVIDENCE</span><div>Guideline, molecular, literature, translational, clinical-trial, and safety channels remain distinct. Their statuses, provenance, limitations, and unavailable states are preserved for downstream review.</div></div></div>
-<div class="aw-lane"><div class="aw-lane-head"><strong>Join, challenge and consensus</strong><span>03 / Challenge before synthesis</span></div><div class="aw-scroll">{stage3}</div></div>
+<div class="aw-lane"><div class="aw-lane-head"><strong>Join, challenge and consensus</strong><span>03 / Challenge before synthesis</span></div><div class="aw-scroll">{stage3}</div><div class="aw-human"><span class="pill">GATE</span><div>Consensus may proceed only after the challenge layer does not leave unresolved recommendation-blocking findings. Otherwise the governed workflow remains conditional or abstains.</div></div></div>
 <div class="aw-lane"><div class="aw-lane-head"><strong>Governed outputs and human decision support</strong><span>04 / Presentation, not autonomous care</span></div><div class="aw-scroll">{stage4}</div></div>
 <div id="pinned" class="aw-pinned"></div><div id="tip" class="aw-tip"></div>
 </div><script>

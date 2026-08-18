@@ -8,7 +8,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from app.architecture_ui import (
-    HANDOFFS,
     NODES,
     architecture_css,
     render_agent_anatomy,
@@ -25,103 +24,226 @@ def _node(node_id: str) -> dict[str, Any]:
     return next(item for item in NODES if item["id"] == node_id)
 
 
-def _node_button(node_id: str) -> str:
+def _node_card(node_id: str, *, compact: bool = False, emphasis: bool = False) -> str:
     node = _node(node_id)
+    classes = ["arch-node-card", escape(node["type"])]
+    if compact:
+        classes.append("compact")
+    if emphasis:
+        classes.append("emphasis")
+    class_name = " ".join(classes)
     return (
-        f'<button class="aw-node {escape(node["type"])}" data-id="{escape(node["id"])}">'
-        f'<span class="aw-num">{escape(node["number"])}</span>'
+        f'<button type="button" class="{class_name}" data-id="{escape(node["id"])}">'
+        f'<span class="node-num">{escape(node["number"])}</span>'
         f'<strong>{escape(node["title"])}</strong>'
-        f'<small>{escape(node["purpose"])}</small>'
+        f'<span class="node-purpose">{escape(node["purpose"])}</span>'
+        '<span class="node-more">Click for details</span>'
         '</button>'
     )
 
 
 def _arrow(label: str = "") -> str:
-    label_html = f'<small>{escape(label)}</small>' if label else ""
-    return f'<div class="aw-arrow"><span>→</span>{label_html}</div>'
-
-
-def _row(node_ids: list[str], labels: list[str] | None = None) -> str:
-    pieces: list[str] = []
-    labels = labels or []
-    for idx, node_id in enumerate(node_ids):
-        pieces.append(_node_button(node_id))
-        if idx < len(node_ids) - 1:
-            pieces.append(_arrow(labels[idx] if idx < len(labels) else ""))
-    return '<div class="aw-row">' + ''.join(pieces) + '</div>'
+    text = f'<small>{escape(label)}</small>' if label else ""
+    return f'<div class="flow-arrow"><span>→</span>{text}</div>'
 
 
 def render_warm_architecture_graph() -> None:
-    details = {node["id"]: node for node in NODES}
-    details_json = json.dumps(details).replace("</", "<\\/")
-
-    stage1 = _row(
-        ["intake", "extraction", "confirmation", "integrity", "missing", "clarification", "router"],
-        ["source available", "structured case", "human confirmation", "integrity passed", "missingness classified", "case ready"],
-    )
-    specialists = ''.join(_node_button(node_id) for node_id in ["guideline", "molecular", "literature", "translational", "trials", "safety"])
-    stage3 = _row(["join", "redteam", "consensus"], ["evidence stack", "challenge findings"])
-    stage4 = _row(["brief", "outputs"], ["governed brief rendered"])
-
-    diagram = (
-        '<div class="aw-lane"><div class="aw-lane-head"><strong>Case representation, integrity and routing</strong><span>01 / Before specialist reasoning</span></div>'
-        f'<div class="aw-scroll">{stage1}</div><div class="aw-branches"><div class="aw-branch"><b>Correction branch:</b> if clinician review identifies a representation mismatch, the case moves through <b>Case Correction Gate</b> and then returns to integrity review.<br><br>{_node_button("correction")}</div>'
-        f'<div class="aw-branch"><b>Clarification branch:</b> when recommendation-blocking information is unresolved, the workflow uses <b>Apply Clarification</b> and rechecks the case before routing.<br><br>{_node_button("apply")}</div></div>'
-        '<div class="aw-human"><span class="pill">HUMAN</span><div>Clinician review is explicit at case confirmation/correction and wherever source candidates require local attestation. Human review does not convert unsupported information into clinical truth.</div></div></div>'
-        '<div class="aw-lane"><div class="aw-lane-head"><strong>Parallel governed specialist agents</strong><span>02 / Bounded evidence channels</span></div>'
-        f'<div class="aw-scroll"><div class="aw-specialists">{specialists}</div></div><div class="aw-human"><span class="pill">EVIDENCE</span><div>Guideline, molecular, literature, translational, clinical-trial, and safety channels remain distinct. Their statuses, provenance, limitations, and unavailable states are preserved for downstream review.</div></div></div>'
-        '<div class="aw-lane"><div class="aw-lane-head"><strong>Join, challenge and consensus</strong><span>03 / Challenge before synthesis</span></div>'
-        f'<div class="aw-scroll">{stage3}</div><div class="aw-human"><span class="pill">GATE</span><div>Consensus may proceed only after the challenge layer does not leave unresolved recommendation-blocking findings. Otherwise the governed workflow remains conditional or abstains.</div></div></div>'
-        '<div class="aw-lane"><div class="aw-lane-head"><strong>Governed outputs and human decision support</strong><span>04 / Presentation, not autonomous care</span></div>'
-        f'<div class="aw-scroll">{stage4}</div></div>'
-    )
+    details_json = json.dumps({node["id"]: node for node in NODES}).replace("</", "<\\/")
 
     html = f'''<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{{--canvas:#f7f7f4;--soft:#fafaf7;--card:#fff;--ink:#26251e;--body:#5a5852;--muted:#807d72;--hair:#e6e5e0;--strong:#cfcdc4;--orange:#f54e00;--thinking:#dfa88f;--grep:#9fc9a2;--read:#9fbbe0;--edit:#c0a8dd;--done:#c08532}}
-*{{box-sizing:border-box}}body{{margin:0;background:var(--canvas);color:var(--ink);font-family:Inter,system-ui,"Helvetica Neue",Arial,sans-serif}}.aw{{padding:14px}}
-.aw-help{{background:#fff;border:1px solid var(--hair);border-radius:12px;padding:15px 17px;margin-bottom:12px;font-size:14.5px;line-height:1.6;color:var(--body)}}.aw-help b{{color:var(--orange)}}
-.aw-tools{{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:-2px 0 12px}}.aw-tools span{{font-size:13px;color:var(--muted)}}.aw-expand{{border:1px solid var(--strong);background:#fff;color:var(--ink);border-radius:8px;padding:9px 13px;font-size:14px;font-weight:600;cursor:pointer}}.aw-expand:hover{{border-color:var(--ink)}}
-.aw-lane{{background:#fff;border:1px solid var(--hair);border-radius:12px;padding:17px;margin-bottom:12px}}.aw-lane-head{{display:flex;justify-content:space-between;gap:12px;align-items:end;border-bottom:1px solid var(--hair);padding-bottom:11px;margin-bottom:14px}}.aw-lane-head strong{{font-size:17px;font-weight:600;line-height:1.3}}.aw-lane-head span{{font:600 11px/1.4 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}}
-.aw-row{{display:flex;align-items:stretch;gap:8px;min-width:max-content}}.aw-scroll{{overflow-x:auto;padding-bottom:6px}}.aw-node{{width:220px;min-height:136px;text-align:left;border:1px solid var(--strong);border-radius:10px;padding:14px;background:#fff;color:var(--ink);cursor:pointer;font:inherit;box-shadow:none;transition:border-color .12s ease,transform .12s ease}}.aw-node:hover,.aw-node:focus,.aw-node.pinned{{border-color:var(--ink);outline:none;transform:translateY(-1px)}}
-.aw-node.case{{background:#eef3f9;border-top:5px solid var(--read)}}.aw-node.gate{{background:#fff4ef;border-top:5px solid var(--thinking)}}.aw-node.safety{{background:#fff8e7;border-top:5px solid var(--done)}}.aw-node.evidence{{background:#eff7ef;border-top:5px solid var(--grep)}}.aw-node.challenge{{background:#f5eff8;border-top:5px solid var(--edit)}}.aw-node.output{{background:var(--ink);color:var(--canvas);border-color:var(--ink)}}.aw-node.output small,.aw-node.output .aw-num{{color:#d6d2c7}}
-.aw-num{{display:block;font:600 11px/1.2 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}}.aw-node strong{{display:block;font-size:15px;line-height:1.35;font-weight:600}}.aw-node small{{display:block;font-size:13px;line-height:1.5;color:var(--body);margin-top:7px}}
-.aw-arrow{{width:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);flex:none}}.aw-arrow span{{font-size:23px}}.aw-arrow small{{font:600 10px/1.4 "JetBrains Mono",ui-monospace,monospace;text-transform:uppercase;text-align:center;letter-spacing:.03em;margin-top:4px;color:var(--muted)}}
-.aw-branches{{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:13px}}.aw-branch{{background:var(--soft);border:1px dashed var(--strong);border-radius:10px;padding:13px;font-size:13.5px;line-height:1.55;color:var(--body)}}.aw-branch b{{color:var(--ink)}}.aw-branch .aw-node{{width:100%;min-height:118px;margin-top:4px}}
-.aw-specialists{{display:grid;grid-template-columns:repeat(6,minmax(190px,1fr));gap:9px;min-width:1220px}}.aw-specialists .aw-node{{width:auto}}
-.aw-human{{display:flex;gap:10px;align-items:flex-start;margin-top:13px;padding:13px 14px;border:1px solid #ead6a6;background:#fff8e7;border-radius:10px}}.aw-human .pill{{flex:none;background:var(--done);color:#fff;border-radius:999px;padding:6px 9px;font:600 10px/1 "JetBrains Mono",monospace;letter-spacing:.05em}}.aw-human div{{font-size:13.5px;line-height:1.55;color:#6f5724}}
-.aw-tip{{position:fixed;z-index:99;display:none;width:min(440px,calc(100vw - 28px));background:#26251e;color:#fff;border-radius:12px;padding:17px;pointer-events:none}}.aw-tip.show{{display:block}}.aw-tip .k{{font:600 11px/1.4 "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.07em;color:#c8c3b8}}.aw-tip h3{{font-size:19px;line-height:1.3;margin:5px 0 10px;font-weight:500}}.aw-tip p{{font-size:14px;line-height:1.55;color:#e6e2d8;margin:7px 0}}.aw-tip b{{color:#fff}}
-.aw-pinned{{display:none;margin-top:13px;border:1px solid var(--hair);border-radius:12px;background:#fff;padding:16px}}.aw-pinned.show{{display:block}}.aw-pinned h3{{margin:2px 0 9px;font-size:19px;font-weight:500}}.aw-pinned p{{font-size:14.5px;line-height:1.6;color:var(--body);margin:7px 0}}.aw-pinned .close{{float:right;border:1px solid var(--strong);background:#fff;border-radius:8px;padding:7px 10px;cursor:pointer;color:var(--ink);font-size:13px}}
-.aw-dialog{{width:96vw;max-width:1800px;height:92vh;border:1px solid var(--strong);border-radius:14px;padding:0;background:var(--canvas);color:var(--ink)}}.aw-dialog::backdrop{{background:rgba(38,37,30,.62)}}.aw-dialog-head{{position:sticky;top:0;z-index:4;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 16px;background:rgba(247,247,244,.97);border-bottom:1px solid var(--hair)}}.aw-dialog-head strong{{font-size:18px;font-weight:600}}.aw-dialog-head span{{font-size:13px;color:var(--muted)}}.aw-dialog-close{{border:1px solid var(--strong);background:#fff;border-radius:8px;padding:9px 13px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer}}.aw-dialog-body{{padding:16px;overflow:auto;height:calc(92vh - 64px)}}.aw-dialog .aw-node{{width:250px;min-height:150px}}.aw-dialog .aw-specialists{{grid-template-columns:repeat(6,minmax(220px,1fr));min-width:1420px}}.aw-dialog .aw-branch .aw-node{{width:100%}}.aw-dialog .aw-tip{{z-index:10000}}.aw-dialog .aw-pinned{{margin-bottom:14px}}
-@media(max-width:760px){{.aw-branches{{grid-template-columns:1fr}}.aw{{padding:8px}}.aw-tools{{align-items:flex-start;flex-direction:column}}.aw-lane-head{{align-items:flex-start;flex-direction:column}}}}
-</style></head><body><div class="aw">
-<div class="aw-help"><b>How to use this diagram:</b> hover over a node for a quick explanation. Click or tap a node to pin its purpose, inputs, outputs, safety boundary, and handoff logic. For easier reading on a smaller screen, open the larger architecture view.</div>
-<div class="aw-tools"><span>Need more space?</span><button class="aw-expand" id="openZoom" type="button">Open larger architecture view</button></div>
-<div id="mainDiagram">{diagram}</div>
-<div id="pinned" class="aw-pinned"></div><div id="tip" class="aw-tip"></div>
-<dialog id="zoomDialog" class="aw-dialog"><div class="aw-dialog-head"><div><strong>Pan-Oncology Tumor Board Intelligence</strong><br><span>Expanded architecture view · scroll horizontally where needed</span></div><button id="closeZoom" class="aw-dialog-close" type="button">Close</button></div><div class="aw-dialog-body">{diagram}<div id="zoomPinned" class="aw-pinned"></div><div id="zoomTip" class="aw-tip"></div></div></dialog>
-</div><script>
+:root{{--canvas:#f7f7f4;--soft:#fafaf7;--card:#ffffff;--ink:#26251e;--body:#5a5852;--muted:#807d72;--hair:#e6e5e0;--strong:#cfcdc4;--orange:#f54e00;--thinking:#dfa88f;--grep:#9fc9a2;--read:#9fbbe0;--edit:#c0a8dd;--done:#c08532}}
+*{{box-sizing:border-box}}
+html,body{{margin:0;background:var(--canvas);color:var(--ink);font-family:Inter,system-ui,"Helvetica Neue",Arial,sans-serif;overflow-x:hidden}}
+.arch-map{{padding:8px 4px 18px;max-width:1500px;margin:0 auto}}
+.read-guide{{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:center;background:#fff;border:1px solid var(--hair);border-radius:12px;padding:20px 22px;margin-bottom:18px}}
+.read-guide h2{{font-size:22px;line-height:1.25;font-weight:500;margin:0 0 7px}}
+.read-guide p{{font-size:15px;line-height:1.62;color:var(--body);margin:0}}
+.phase-key{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}}
+.phase-chip{{border-radius:999px;padding:8px 10px;text-align:center;font:600 10px/1.25 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}}
+.phase-chip.case{{background:#eaf2fb}}.phase-chip.specialist{{background:#eef7ef}}.phase-chip.challenge{{background:#f5eff8}}.phase-chip.output{{background:#f6eee9}}
+.phase{{background:#fff;border:1px solid var(--hair);border-radius:14px;padding:22px;margin:0 0 18px}}
+.phase-head{{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid var(--hair);margin-bottom:18px}}
+.phase-head-left{{display:flex;gap:12px;align-items:flex-start}}
+.phase-no{{min-width:44px;height:30px;border-radius:999px;display:grid;place-items:center;font:600 10px/1 "JetBrains Mono",monospace;letter-spacing:.08em;background:var(--soft);border:1px solid var(--hair);color:var(--muted)}}
+.phase-title strong{{display:block;font-size:21px;line-height:1.3;font-weight:500}}
+.phase-title span{{display:block;font-size:14px;line-height:1.55;color:var(--body);margin-top:4px;max-width:820px}}
+.phase-rule{{font:600 10px/1.4 "JetBrains Mono",monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:right;max-width:250px}}
+.main-flow{{display:grid;grid-template-columns:1fr 58px 1fr 58px 1fr 58px 1fr;align-items:stretch;gap:6px}}
+.secondary-flow{{display:grid;grid-template-columns:1fr 58px 1fr 58px 1fr;align-items:stretch;gap:6px;max-width:930px;margin:0 auto}}
+.flow-arrow{{display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);min-width:0}}
+.flow-arrow span{{font-size:23px;line-height:1}}
+.flow-arrow small{{font:600 9px/1.35 "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.03em;text-align:center;color:var(--muted);margin-top:5px}}
+.flow-down{{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 0;color:var(--muted)}}
+.flow-down span{{font-size:23px;line-height:1}}
+.flow-down small{{font:600 9px/1.4 "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.04em;margin-top:4px}}
+.arch-node-card{{appearance:none;width:100%;min-height:154px;text-align:left;border:1px solid var(--strong);border-radius:11px;padding:15px;background:#fff;color:var(--ink);font:inherit;cursor:pointer;box-shadow:none;transition:border-color .12s ease,transform .12s ease,background .12s ease}}
+.arch-node-card:hover,.arch-node-card:focus{{outline:none;border-color:var(--ink);transform:translateY(-1px)}}
+.arch-node-card.case{{background:#eef4fb;border-top:5px solid var(--read)}}
+.arch-node-card.gate{{background:#fff4ef;border-top:5px solid var(--thinking)}}
+.arch-node-card.safety{{background:#fff8e7;border-top:5px solid var(--done)}}
+.arch-node-card.evidence{{background:#eff7ef;border-top:5px solid var(--grep)}}
+.arch-node-card.challenge{{background:#f5eff8;border-top:5px solid var(--edit)}}
+.arch-node-card.output{{background:var(--ink);color:var(--canvas);border-color:var(--ink)}}
+.arch-node-card.output .node-num,.arch-node-card.output .node-purpose,.arch-node-card.output .node-more{{color:#d6d2c7}}
+.arch-node-card.emphasis{{border-width:2px}}
+.node-num{{display:block;font:600 10px/1.25 "JetBrains Mono",monospace;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}}
+.arch-node-card strong{{display:block;font-size:16px;line-height:1.35;font-weight:600}}
+.node-purpose{{display:block;font-size:13.5px;line-height:1.5;color:var(--body);margin-top:7px}}
+.node-more{{display:block;font-size:11px;color:var(--muted);margin-top:10px}}
+.branch-grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px auto 0;max-width:930px}}
+.branch-card{{border:1px dashed var(--strong);border-radius:11px;background:var(--soft);padding:13px}}
+.branch-card .branch-label{{font:600 10px/1.4 "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px}}
+.branch-card p{{font-size:13px;line-height:1.5;color:var(--body);margin:0 0 10px}}
+.branch-card .arch-node-card{{min-height:128px}}
+.specialist-intro,.join-note,.human-note{{font-size:14px;line-height:1.58;color:var(--body);background:var(--soft);border:1px solid var(--hair);border-radius:10px;padding:13px 15px;margin-bottom:14px}}
+.specialist-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}}
+.specialist-grid .arch-node-card{{min-height:170px}}
+.converge{{display:flex;align-items:center;justify-content:center;gap:12px;margin:16px 0 2px;color:var(--muted)}}
+.converge::before,.converge::after{{content:"";height:1px;background:var(--hair);flex:1}}
+.converge span{{font:600 10px/1.4 "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.06em}}
+.challenge-flow{{display:grid;grid-template-columns:1fr 64px 1fr 64px 1fr;align-items:stretch;gap:6px;max-width:1020px;margin:0 auto}}
+.challenge-flow .arch-node-card{{min-height:168px}}
+.output-flow{{display:grid;grid-template-columns:1fr 64px 1fr 64px 1fr;align-items:stretch;gap:6px;max-width:1020px;margin:0 auto}}
+.clinician-card{{min-height:154px;border:1px solid var(--ink);border-radius:11px;padding:15px;background:#fff;color:var(--ink);display:flex;flex-direction:column;justify-content:center}}
+.clinician-card .node-num{{color:var(--orange)}}
+.clinician-card strong{{font-size:17px;line-height:1.35}}
+.clinician-card span{{font-size:13.5px;line-height:1.5;color:var(--body);margin-top:7px}}
+.human-note{{margin-top:14px;margin-bottom:0;background:#fff8e7;border-color:#ead6a6;color:#6f5724}}
+.detail-dialog{{width:min(760px,calc(100vw - 28px));max-height:86vh;border:1px solid var(--strong);border-radius:14px;padding:0;background:#fff;color:var(--ink)}}
+.detail-dialog::backdrop{{background:rgba(38,37,30,.58)}}
+.detail-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:17px 18px;border-bottom:1px solid var(--hair);background:var(--canvas)}}
+.detail-head .k{{font:600 10px/1.4 "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}}
+.detail-head h3{{font-size:22px;line-height:1.3;font-weight:500;margin:4px 0 0}}
+.detail-close{{border:1px solid var(--strong);background:#fff;color:var(--ink);border-radius:8px;padding:8px 11px;font-size:14px;font-weight:600;cursor:pointer}}
+.detail-body{{padding:18px;overflow:auto;max-height:calc(86vh - 82px)}}
+.detail-row{{padding:11px 0;border-bottom:1px solid var(--hair)}}.detail-row:last-child{{border-bottom:0}}
+.detail-row strong{{display:block;font-size:13px;color:var(--ink);margin-bottom:4px}}
+.detail-row span{{display:block;font-size:14.5px;line-height:1.62;color:var(--body)}}
+@media(max-width:1080px){{
+ .read-guide{{grid-template-columns:1fr}}.main-flow{{grid-template-columns:1fr 38px 1fr}}.main-flow>.flow-arrow:nth-of-type(2),.main-flow>.flow-arrow:nth-of-type(3){{display:none}}
+ .main-flow>.arch-node-card:nth-of-type(3),.main-flow>.arch-node-card:nth-of-type(4){{margin-top:10px}}
+ .specialist-grid{{grid-template-columns:repeat(2,1fr)}}
+ .challenge-flow,.output-flow{{grid-template-columns:1fr 48px 1fr 48px 1fr}}
+}}
+@media(max-width:760px){{
+ .phase{{padding:16px}}.phase-head{{flex-direction:column}}.phase-rule{{text-align:left}}
+ .phase-key{{grid-template-columns:1fr 1fr}}
+ .main-flow,.secondary-flow,.challenge-flow,.output-flow{{display:flex;flex-direction:column;gap:8px;max-width:none}}
+ .flow-arrow{{height:30px}}.flow-arrow span{{transform:rotate(90deg)}}.flow-arrow small{{display:none}}
+ .branch-grid,.specialist-grid{{grid-template-columns:1fr}}
+ .arch-node-card,.specialist-grid .arch-node-card,.challenge-flow .arch-node-card{{min-height:auto}}
+}}
+</style>
+</head>
+<body>
+<div class="arch-map">
+  <section class="read-guide">
+    <div>
+      <h2>How to read this architecture</h2>
+      <p>A traditional chatbot tries to answer the whole question in one interaction. Tumor Board Intelligence separates the work into bounded stages: first the case is represented and checked, then relevant evidence specialists work independently, their findings are challenged, and only then can a clinician-facing brief be produced.</p>
+    </div>
+    <div class="phase-key">
+      <div class="phase-chip case">Case</div>
+      <div class="phase-chip specialist">Specialists</div>
+      <div class="phase-chip challenge">Challenge</div>
+      <div class="phase-chip output">Tumor Board</div>
+    </div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-head-left"><div class="phase-no">01</div><div class="phase-title"><strong>Case understanding and safety</strong><span>The system creates one source-traced case representation, asks clinicians to verify it, and keeps missing or conflicting information visible before specialist reasoning begins.</span></div></div>
+      <div class="phase-rule">No specialist reasoning before required case gates</div>
+    </div>
+    <div class="main-flow">
+      {_node_card("intake")}{_arrow("source")}{_node_card("extraction")}{_arrow("structured case")}{_node_card("confirmation")}{_arrow("human reviewed")}{_node_card("integrity")}
+    </div>
+    <div class="flow-down"><span>↓</span><small>Integrity cleared</small></div>
+    <div class="secondary-flow">
+      {_node_card("missing")}{_arrow("classified")}{_node_card("clarification")}{_arrow("case ready")}{_node_card("router")}
+    </div>
+    <div class="branch-grid">
+      <div class="branch-card"><div class="branch-label">Correction loop</div><p>If clinician review identifies a representation mismatch, the case is corrected before integrity review continues.</p>{_node_card("correction", compact=True)}</div>
+      <div class="branch-card"><div class="branch-label">Clarification loop</div><p>If recommendation-blocking information is unresolved, verified clarification is added and the case is rechecked before routing.</p>{_node_card("apply", compact=True)}</div>
+    </div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-head-left"><div class="phase-no">02</div><div class="phase-title"><strong>Parallel specialist agents</strong><span>The Clinical Router sends the same governed case state to the evidence channels relevant to the represented question. Each specialist has a bounded role and returns a structured result.</span></div></div>
+      <div class="phase-rule">Independent evidence channels, shared case state</div>
+    </div>
+    <div class="specialist-intro">The specialists do not vote and they do not independently make the final treatment decision. Their outputs preserve evidence source, availability, limitations, and uncertainty for downstream review.</div>
+    <div class="specialist-grid">
+      {_node_card("guideline")}{_node_card("molecular")}{_node_card("literature")}
+      {_node_card("translational")}{_node_card("trials")}{_node_card("safety")}
+    </div>
+    <div class="converge"><span>Structured specialist outputs + provenance</span></div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-head-left"><div class="phase-no">03</div><div class="phase-title"><strong>Challenge and consensus</strong><span>Specialist outputs are assembled without flattening their differences. The Clinical Red Team then challenges evidence sufficiency, assumptions, conflicts, and unsupported recommendation logic before consensus is allowed.</span></div></div>
+      <div class="phase-rule">Challenge before synthesis</div>
+    </div>
+    <div class="challenge-flow">
+      {_node_card("join")}{_arrow("assembled")}{_node_card("redteam", emphasis=True)}{_arrow("no blocking finding")}{_node_card("consensus")}
+    </div>
+    <div class="human-note"><strong>Fail-closed behavior:</strong> if evidence remains inadequate or a blocking challenge is unresolved, the workflow can remain conditional or abstain rather than forcing a recommendation.</div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-head-left"><div class="phase-no">04</div><div class="phase-title"><strong>Tumor Board output and human decision support</strong><span>The final layers translate governed workflow state into a readable brief and audit-oriented output. The clinician and multidisciplinary tumor board remain the final decision-makers.</span></div></div>
+      <div class="phase-rule">Presentation does not create new clinical claims</div>
+    </div>
+    <div class="output-flow">
+      {_node_card("brief")}{_arrow("render")}{_node_card("outputs")}{_arrow("review")}
+      <div class="clinician-card"><span class="node-num">HUMAN</span><strong>Clinician / Multidisciplinary Tumor Board</strong><span>Reviews applicability, uncertainty, patient context, alternatives, and the final management decision.</span></div>
+    </div>
+  </section>
+</div>
+
+<dialog id="detailDialog" class="detail-dialog">
+  <div class="detail-head"><div><div id="detailKicker" class="k"></div><h3 id="detailTitle"></h3></div><button id="detailClose" class="detail-close" type="button">Close</button></div>
+  <div id="detailBody" class="detail-body"></div>
+</dialog>
+
+<script>
 const DETAILS={details_json};
-const tip=document.getElementById('tip');const pinned=document.getElementById('pinned');const zoomTip=document.getElementById('zoomTip');const zoomPinned=document.getElementById('zoomPinned');const dialog=document.getElementById('zoomDialog');let pinnedId=null;
-function inner(d,close=false){{return `${{close?'<button class="close" onclick="clearPinned()">Close</button>':''}}<div class="k">${{d.number}} · ${{d.type}}</div><h3>${{d.title}}</h3><p><b>Purpose:</b> ${{d.purpose}}</p><p><b>Inputs:</b> ${{d.inputs}}</p><p><b>Output:</b> ${{d.output}}</p><p><b>Safety boundary:</b> ${{d.safety}}</p><p><b>Why this step exists:</b> ${{d.why}}</p>`}}
-function placeTip(el,e){{const pad=14;const w=440;let x=e.clientX+14,y=e.clientY+14;if(x+w>window.innerWidth-pad)x=e.clientX-w-14;if(y+360>window.innerHeight-pad)y=Math.max(pad,window.innerHeight-374);el.style.left=Math.max(pad,x)+'px';el.style.top=Math.max(pad,y)+'px'}}
-function clearPinned(){{pinnedId=null;[pinned,zoomPinned].forEach(el=>{{el.classList.remove('show');el.innerHTML=''}});document.querySelectorAll('.aw-node').forEach(n=>n.classList.remove('pinned'))}}
-function bindNodes(){{document.querySelectorAll('.aw-node').forEach(node=>{{const id=node.dataset.id;const d=DETAILS[id];if(!d||node.dataset.bound==='1')return;node.dataset.bound='1';const inDialog=!!node.closest('dialog');const localTip=inDialog?zoomTip:tip;const localPinned=inDialog?zoomPinned:pinned;node.addEventListener('mouseenter',e=>{{if(!pinnedId){{localTip.innerHTML=inner(d);localTip.classList.add('show');placeTip(localTip,e)}}}});node.addEventListener('mousemove',e=>{{if(!pinnedId)placeTip(localTip,e)}});node.addEventListener('mouseleave',()=>{{if(!pinnedId)localTip.classList.remove('show')}});node.addEventListener('focus',e=>{{if(!pinnedId){{localTip.innerHTML=inner(d);localTip.classList.add('show');const r=node.getBoundingClientRect();placeTip(localTip,{{clientX:r.right,clientY:r.top}})}}}});node.addEventListener('blur',()=>{{if(!pinnedId)localTip.classList.remove('show')}});node.addEventListener('click',()=>{{document.querySelectorAll('.aw-node').forEach(n=>n.classList.remove('pinned'));node.classList.add('pinned');pinnedId=id;tip.classList.remove('show');zoomTip.classList.remove('show');localPinned.innerHTML=inner(d,true);localPinned.classList.add('show');localPinned.scrollIntoView({{behavior:'smooth',block:'nearest'}})}})}})}}
-bindNodes();document.getElementById('openZoom').addEventListener('click',()=>{{clearPinned();dialog.showModal()}});document.getElementById('closeZoom').addEventListener('click',()=>{{clearPinned();dialog.close()}});dialog.addEventListener('click',e=>{{if(e.target===dialog){{clearPinned();dialog.close()}}}});document.addEventListener('keydown',e=>{{if(e.key==='Escape'&&dialog.open)clearPinned()}});
-</script></body></html>'''
-    components.html(html, height=1320, scrolling=True)
+const dialog=document.getElementById('detailDialog');
+const title=document.getElementById('detailTitle');
+const kicker=document.getElementById('detailKicker');
+const body=document.getElementById('detailBody');
+const closeBtn=document.getElementById('detailClose');
+function esc(s){{return String(s??'').replace(/[&<>"']/g,m=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}}[m]))}}
+function row(label,value){{return `<div class="detail-row"><strong>${{esc(label)}}</strong><span>${{esc(value)}}</span></div>`}}
+function openDetail(id){{const d=DETAILS[id];if(!d)return;kicker.textContent=`${{d.number}} · ${{d.type}}`;title.textContent=d.title;body.innerHTML=row('Purpose',d.purpose)+row('Inputs',d.inputs)+row('What happens in this node',d.action)+row('Output / handoff',d.output)+row('Safety boundary',d.safety)+row('Why this step exists',d.why);if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','')}}
+document.querySelectorAll('.arch-node-card').forEach(node=>node.addEventListener('click',()=>openDetail(node.dataset.id)));
+closeBtn.addEventListener('click',()=>dialog.close());
+dialog.addEventListener('click',e=>{{if(e.target===dialog)dialog.close()}});
+document.addEventListener('keydown',e=>{{if(e.key==='Escape'&&dialog.open)dialog.close()}});
+</script>
+</body>
+</html>'''
+
+    components.html(html, height=2160, scrolling=False)
 
 
 def render_architecture_page() -> None:
     faculty_css()
-    architecture_css()
     inject_xai_theme()
+    architecture_css()
     product_header("Scientific architecture")
     top_navigation("architecture")
     st.markdown(
         '<div class="arch-hero"><div class="eyebrow">Technical view</div><h1>How the tumor-board agents work together</h1>'
-        '<p>This page shows the complete governed multi-agent workflow. If AI agents are new to you, start on the Overview first. Here, each node represents a bounded job, and each handoff represents a condition that must be satisfied before the next part of the workflow proceeds.</p></div>',
+        '<p>This page shows the governed workflow as four readable phases. The diagram itself is designed to fit the page without horizontal scrolling. Click any individual agent or gate when you want its complete purpose, inputs, outputs, safety boundary, and handoff logic.</p></div>',
         unsafe_allow_html=True,
     )
     render_warm_architecture_graph()

@@ -18,12 +18,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-_original_footer = overview_ui.research_footer
+if not hasattr(overview_ui, "_base_research_footer"):
+    overview_ui._base_research_footer = overview_ui.research_footer
 
 
 def _footer_with_publication_figure() -> None:
     render_publication_panel(key_prefix="overview", compact=True)
-    _original_footer()
+    overview_ui._base_research_footer()
 
 
 overview_ui.research_footer = _footer_with_publication_figure

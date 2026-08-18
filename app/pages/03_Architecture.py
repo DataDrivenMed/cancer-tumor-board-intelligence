@@ -9,7 +9,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.architecture_warm_ui import render_architecture_page
+import app.architecture_warm_ui as architecture_ui
+from app.architecture_publication_view import render_publication_panel
 
 st.set_page_config(
     page_title="Architecture · Pan-Oncology Tumor Board Intelligence",
@@ -17,4 +18,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-render_architecture_page()
+_original_footer = architecture_ui.research_footer
+
+
+def _footer_with_publication_figure() -> None:
+    render_publication_panel(key_prefix="architecture", compact=False)
+    _original_footer()
+
+
+architecture_ui.research_footer = _footer_with_publication_figure
+architecture_ui.render_architecture_page()

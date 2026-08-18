@@ -9,7 +9,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.overview_ui import render_final_overview
+import app.overview_ui as overview_ui
+from app.architecture_publication_view import render_publication_panel
 
 st.set_page_config(
     page_title="Pan-Oncology Tumor Board Intelligence",
@@ -17,4 +18,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-render_final_overview()
+_original_footer = overview_ui.research_footer
+
+
+def _footer_with_publication_figure() -> None:
+    render_publication_panel(key_prefix="overview", compact=True)
+    _original_footer()
+
+
+overview_ui.research_footer = _footer_with_publication_figure
+overview_ui.render_final_overview()

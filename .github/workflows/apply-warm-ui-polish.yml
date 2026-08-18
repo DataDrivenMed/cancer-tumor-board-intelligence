@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/apply-warm-ui-polish.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,7 +25,6 @@ jobs:
           from pathlib import Path
           import re
 
-          # Add stage-specific user guidance to the persistent product rail.
           faculty = Path("app/faculty_ui.py")
           text = faculty.read_text(encoding="utf-8")
           if "stage_help = {" not in text:
@@ -54,7 +54,6 @@ jobs:
               text = text[:idx] + help_block + text[idx:]
               faculty.write_text(text, encoding="utf-8")
 
-          # Restyle the embedded architecture only. Preserve all nodes, paths, JS, tooltips, and interactions.
           arch = Path("app/assets/architecture_interactive.html")
           html = arch.read_text(encoding="utf-8")
           html = html.replace("--paper:#0a0a0a", "--paper:#f7f7f4")

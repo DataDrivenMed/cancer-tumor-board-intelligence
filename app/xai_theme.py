@@ -155,11 +155,58 @@ code,pre,.stCode,[data-testid="stCodeBlock"]{font-family:var(--mono)!important;b
 [data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-disabled="true"]{background:var(--panelhi)!important;border-color:var(--violet)!important;color:var(--violet-ink)!important}
 [data-testid="collapsedControl"]{display:none!important}
 
+/* ---------- top nav tabs (override old pastel per-href colors; Signal premium) ---------- */
+/* These beat faculty_ui's hardcoded pastels regardless of load order. */
+.block-container [data-testid="stPageLink-NavLink"],
+.block-container [data-testid="stPageLink-NavLink"][href*="Clinical_Workspace"],
+.block-container [data-testid="stPageLink-NavLink"][href*="Workspace"],
+.block-container [data-testid="stPageLink-NavLink"][href*="Validation"],
+.block-container [data-testid="stPageLink-NavLink"][href*="Architecture"],
+.block-container [data-testid="stPageLink-NavLink"][href*="About"],
+.block-container [data-testid="stPageLink-NavLink"][href*="main"]{
+  background:var(--panel)!important;border:1px solid var(--line)!important;color:var(--body)!important;
+  border-radius:11px!important;font-weight:600!important;font-size:14px!important;letter-spacing:-.005em!important;
+  min-height:44px!important;transition:background .15s ease,border-color .15s ease,color .15s ease!important}
+.block-container [data-testid="stPageLink-NavLink"]:hover{
+  background:var(--panelhi)!important;border-color:var(--violet)!important;color:#fff!important}
+/* active tab: mint underline accent + brighter text, unmistakable on dark */
+.block-container [data-testid="stPageLink-NavLink"][aria-disabled="true"]{
+  background:var(--panelhi)!important;border-color:var(--mint)!important;color:#fff!important;
+  box-shadow:inset 0 -2px 0 0 var(--mint)!important;opacity:1!important}
+
+/* sidebar nav links keep their own quieter treatment (defined above), unaffected here */
+
 .fx-footer,.footer{border-top:1px solid var(--line)!important;color:var(--muted)!important;margin-top:34px;padding:16px 0}
 .fx-footer{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12px!important}
 
 .verified{display:inline-flex;align-items:center;gap:5px;font:600 10px/1 var(--mono);color:var(--mint);text-transform:uppercase;letter-spacing:.05em}
 .verified.review-needed{color:var(--warn)}
+
+/* ---------- catch-all: panels that were LIGHT or intentionally-dark in the
+   old themes and now render wrong on the Signal canvas. Force dark bg + readable
+   text so nothing is ever pale-on-pale or white-on-white. High specificity via
+   .stApp prefix so these win over leftover !important pastels. ---------- */
+.stApp .ov-clinician,.stApp .ov-agents,.stApp .ov-assistant-intro,.stApp .ov-preview,
+.stApp .ov-step,.stApp .ov-card,.stApp .arch-node-card,.stApp .arch-callout,
+.stApp .fx-chat-head,.stApp .fx-answer,.stApp .fx-thirty,.stApp .fx-core{
+  background:var(--panel)!important;border:1px solid var(--line)!important;border-radius:var(--r)!important}
+/* the two "feature" dark panels lift a shade and keep the violet edge */
+.stApp .ov-clinician,.stApp .fx-thirty,.stApp .fx-core{
+  background:var(--panelhi)!important;border-left:3px solid var(--violet)!important}
+/* force ALL descendant text in these panels to readable Signal colors */
+.stApp .ov-clinician *,.stApp .ov-agents *,.stApp .ov-assistant-intro *,.stApp .ov-preview *,
+.stApp .ov-step *,.stApp .ov-card *,.stApp .arch-node-card *,.stApp .arch-callout *,
+.stApp .ov-clinician-item *,.stApp .ov-agent-item *{
+  color:var(--body)!important}
+.stApp .ov-clinician h3,.stApp .ov-clinician-item strong,.stApp .ov-agents h3,
+.stApp .ov-card h3,.stApp .ov-step strong,.stApp .ov-assistant-intro h3,
+.stApp .ov-preview strong,.stApp .arch-node-card strong{color:var(--ink)!important;font-weight:600!important}
+/* inner sub-cells (grids inside feature panels) get a slightly deeper fill for separation */
+.stApp .ov-clinician-item,.stApp .ov-agent-item,.stApp .ov-preview-cell{
+  background:var(--panel)!important;border:1px solid var(--line2)!important;border-radius:10px!important}
+/* eyebrow/label text inside these stays muted-mono, not body */
+.stApp .ov-clinician .ov-kicker,.stApp .ov-card .ov-label,.stApp .ov-agents .ov-kicker,
+.stApp .ov-preview-cell span{color:var(--muted)!important}
 
 @media(max-width:1024px){
   .block-container{max-width:100%!important;padding-left:1rem!important;padding-right:1rem!important}

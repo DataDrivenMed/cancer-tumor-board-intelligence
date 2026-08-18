@@ -11,7 +11,8 @@ def render_publication_panel(*, key_prefix: str, compact: bool = False) -> None:
         '<div style="margin-top:24px"><div class="eyebrow">Publication figure</div>'
         '<h2 style="font-size:28px;margin:5px 0 8px">Full multi-agent architecture</h2>'
         '<p style="font-size:15px;line-height:1.6;color:var(--x-body);max-width:900px;margin:0 0 14px">'
-        'Publication-style architecture with the full workflow, specialist-agent roles, safety gates, conditional loops, challenge logic, human review points, and final clinician-facing outputs.'</n        'p></div>',
+        'Publication-style architecture with the full workflow, specialist-agent roles, safety gates, conditional loops, challenge logic, human review points, and final clinician-facing outputs.'
+        '</p></div>',
         unsafe_allow_html=True,
     )
     svg = publication_svg().replace(

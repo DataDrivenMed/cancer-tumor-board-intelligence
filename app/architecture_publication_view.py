@@ -24,7 +24,7 @@ def render_publication_panel(*, key_prefix: str, compact: bool = False) -> None:
         '<div style="width:100%;background:#fbf9f3;border:1px solid #e6e5e0;border-radius:12px;overflow:hidden;padding:4px">'
         + svg
         + '</div>',
-        height=520 if compact else 760,
+        height=680 if compact else 900,
         scrolling=False,
     )
     st.download_button(

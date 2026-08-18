@@ -15,12 +15,16 @@ def test_shared_warm_editorial_theme_is_wired():
     assert "inject_xai_theme()" in overview
 
 
-def test_architecture_uses_warm_canvas_and_keeps_interaction():
-    html = Path("app/assets/architecture_interactive.html").read_text(encoding="utf-8")
-    assert "--paper:#f7f7f4" in html
-    assert "Hover over any box" in html
-    assert "Click/tap a box" in html or "Click or tap" in html
-    assert "const DETAILS=" in html
+def test_architecture_uses_warm_interactive_renderer():
+    page = Path("app/pages/03_Architecture.py").read_text(encoding="utf-8")
+    renderer = Path("app/architecture_warm_ui.py").read_text(encoding="utf-8")
+    assert "architecture_warm_ui" in page
+    assert "--canvas:#f7f7f4" in renderer
+    assert "hover over a node" in renderer
+    assert "Click or tap a node" in renderer
+    assert "const DETAILS=" in renderer
+    assert "HANDOFFS" in renderer
+    assert "NODES" in renderer
 
 
 def test_overview_explains_agents_and_guided_use():

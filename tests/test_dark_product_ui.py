@@ -15,16 +15,22 @@ def test_shared_warm_editorial_theme_is_wired():
     assert "inject_xai_theme()" in overview
 
 
-def test_architecture_uses_warm_interactive_renderer():
+def test_architecture_uses_warm_non_scroll_system_map():
     page = Path("app/pages/03_Architecture.py").read_text(encoding="utf-8")
     renderer = Path("app/architecture_warm_ui.py").read_text(encoding="utf-8")
     assert "architecture_warm_ui" in page
     assert "--canvas:#f7f7f4" in renderer
-    assert "hover over a node" in renderer
-    assert "Click or tap a node" in renderer
+    assert "How to read this architecture" in renderer
+    assert "Case understanding and safety" in renderer
+    assert "Parallel specialist agents" in renderer
+    assert "Challenge and consensus" in renderer
+    assert "Tumor Board output and human decision support" in renderer
+    assert "Click for details" in renderer
     assert "const DETAILS=" in renderer
-    assert "HANDOFFS" in renderer
     assert "NODES" in renderer
+    assert "scrolling=False" in renderer
+    assert "Open larger architecture view" not in renderer
+    assert "overflow-x:auto" not in renderer
 
 
 def test_overview_explains_agents_and_guided_use():

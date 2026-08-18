@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.architecture_ui import render_architecture_page
+from app.architecture_warm_ui import render_architecture_page
 
 st.set_page_config(
     page_title="Architecture · Pan-Oncology Tumor Board Intelligence",

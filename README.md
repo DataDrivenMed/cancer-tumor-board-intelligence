@@ -72,6 +72,8 @@ The original uploaded document is processed transiently and is not retained. A r
 
 See [`docs/PRODUCTION_RELEASE_GUIDE.md`](docs/PRODUCTION_RELEASE_GUIDE.md) for the beginner-oriented staging and release process and [`docs/DEIDENTIFIED_DATA_BOUNDARY.md`](docs/DEIDENTIFIED_DATA_BOUNDARY.md) for the allowed-data boundary.
 
+For the first no-patient-data faculty evaluation, use [`docs/SYNTHETIC_EVALUATION_DEPLOYMENT.md`](docs/SYNTHETIC_EVALUATION_DEPLOYMENT.md). The default [`render.yaml`](render.yaml) creates only a free synthetic-evaluation API. The paid production Blueprint is preserved separately in [`render.production.yaml`](render.production.yaml).
+
 ## Legacy Streamlit clinician workspace
 
 `app/main.py` opens the clinician-facing workspace. The normal interface uses five stages:

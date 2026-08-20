@@ -45,7 +45,7 @@ The access token must be a signed JWT. It must include `sub`, and should include
 
 1. In Render, choose **New > Blueprint**.
 2. Connect this GitHub repository.
-3. Select `render.yaml`.
+3. Set the Blueprint path to `render.production.yaml`. The default `render.yaml` is intentionally reserved for the free synthetic-only evaluation.
 4. Create the staging resources.
 5. Enter every value marked as a secret or manual value.
 

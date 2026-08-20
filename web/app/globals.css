@@ -100,6 +100,7 @@ button { font: inherit; }
 .product-hero h1 { font: clamp(32px, 3vw, 48px)/1.08 Georgia, serif; letter-spacing: -.035em; margin: 0; max-width: 740px; }
 .product-hero > div > p:last-child { color: var(--muted); font-size: 13px; line-height: 1.65; margin: 14px 0 0; max-width: 690px; }
 .start-paths { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin-top: 34px; }
+.start-paths.single-path { grid-template-columns: minmax(0, 1fr); }
 .start-path { background: var(--paper); border: 1px solid var(--line); border-radius: 15px; box-shadow: var(--shadow); min-height: 280px; padding: 27px; position: relative; }
 .start-path.synthetic-path { border-top: 5px solid var(--teal); }
 .start-path.clinical-path { border-top: 5px solid var(--amber); }

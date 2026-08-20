@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: tumor-board-intelligence-api
+    runtime: python
+    plan: starter
+    region: ohio
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ready
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.13
+      - key: DEPLOYMENT_ENV
+        value: production
+      - key: DEPLOYMENT_PROFILE
+        value: full_product
+      - key: AUTH_MODE
+        value: oidc
+      - key: REQUIRE_HTTPS
+        value: "true"
+      - key: ENABLE_API_DOCS
+        value: "false"
+      - key: MAX_REQUEST_BYTES
+        value: "16777216"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tumor-board-intelligence-db
+          property: connectionString
+      - key: OIDC_ISSUER
+        sync: false
+      - key: OIDC_AUDIENCE
+        sync: false
+      - key: OIDC_ORGANIZATION_CLAIM
+        value: org_id
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: TRUSTED_HOSTS
+        sync: false
+      - key: RATE_LIMITING_MODE
+        sync: false
+      - key: MONITORING_SINK
+        sync: false
+      - key: BACKUP_POLICY
+        sync: false
+      - key: MODEL_AUTH_TOKEN
+        sync: false
+      - key: MODEL_NAME
+        value: openai/gpt-oss-120b:fireworks-ai
+      - key: MODEL_REASONING_EFFORT
+        value: high
+
+databases:
+  - name: tumor-board-intelligence-db
+    plan: basic-256mb
+    region: ohio
+    databaseName: tumor_board_intelligence
+    user: tumor_board_app
+    ipAllowList: []

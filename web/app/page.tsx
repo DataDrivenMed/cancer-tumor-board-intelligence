@@ -129,6 +129,7 @@ function StagePanel({
   onBoardDecisionRecorded,
   intakeMode,
   intakeKey,
+  syntheticOnly,
 }: {
   stage: Stage;
   workflow: WorkflowRunResponse | null;
@@ -150,9 +151,10 @@ function StagePanel({
   onBoardDecisionRecorded: (record: BoardDecisionRecord) => void;
   intakeMode: "guided" | "upload";
   intakeKey: number;
+  syntheticOnly: boolean;
 }) {
   if (stage === "intake") {
-    return <CaseIntakeReview key={intakeKey} confirmed={intakeConfirmed} initialIntake={intakeSnapshot} initialMode={intakeMode} onDirty={onIntakeDirty} onConfirmed={onIntakeConfirmed} />;
+    return <CaseIntakeReview key={intakeKey} confirmed={intakeConfirmed} initialIntake={intakeSnapshot} initialMode={intakeMode} syntheticOnly={syntheticOnly} onDirty={onIntakeDirty} onConfirmed={onIntakeConfirmed} />;
   }
 
   if (stage === "verify") {
@@ -389,6 +391,7 @@ function ResearchConsole({ connection }: { connection: ApiConnectionState }) {
 }
 
 function ProductWorkspace() {
+  const syntheticOnly = process.env.NEXT_PUBLIC_DEPLOYMENT_PROFILE === "synthetic_evaluation";
   const [stage, setStage] = useState<Stage>("intake");
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("evidence");
   const [workspace, setWorkspace] = useState<Workspace>("home");
@@ -418,6 +421,7 @@ function ProductWorkspace() {
   const caseType = readable(casePayload.case_type, intakeMode === "upload" ? "deidentified_research" : "synthetic");
 
   const resetCaseSession = (mode: "guided" | "upload") => {
+    if (syntheticOnly && mode === "upload") return;
     setIntakeMode(mode);
     setIntakeKey((current) => current + 1);
     setCasePayload(mode === "guided" ? structuredClone(syntheticCase) : {
@@ -623,8 +627,8 @@ function ProductWorkspace() {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to primary content</a>
       <header className="topbar">
-        <div className="brand-block"><div className="brand-mark" aria-hidden="true">TB</div><div><strong>Tumor Board Intelligence</strong><span>Clinical decision-support workspace</span></div></div>
-        <div className="topbar-actions"><span className="research-badge">Research preview</span><span className={`connection-status ${connection}`} role="status" aria-live="polite"><i aria-hidden="true" /> {connection === "ready" ? "FastAPI connected" : connection === "checking" ? "Checking FastAPI" : "FastAPI unavailable"}</span><a className="profile-button" href="/api/auth/logout" aria-label="Account and sign out">RP</a></div>
+        <div className="brand-block"><div className="brand-mark" aria-hidden="true">TB</div><div><strong>Tumor Board Intelligence</strong><span>{syntheticOnly ? "Synthetic decision-support evaluation" : "Clinical decision-support workspace"}</span></div></div>
+        <div className="topbar-actions"><span className="research-badge">{syntheticOnly ? "Synthetic evaluation" : "Research preview"}</span><span className={`connection-status ${connection}`} role="status" aria-live="polite"><i aria-hidden="true" /> {connection === "ready" ? "FastAPI connected" : connection === "checking" ? "Checking FastAPI" : "FastAPI unavailable"}</span>{!syntheticOnly && <a className="profile-button" href="/api/auth/logout" aria-label="Account and sign out">RP</a>}</div>
       </header>
 
       <div className="workspace-shell">
@@ -637,11 +641,11 @@ function ProductWorkspace() {
           <p className="nav-label">Current case</p>
           <div className="case-nav-card"><span className="case-avatar">{readable(casePayload.case_id, "NEW").slice(0, 3)}</span><div><strong>{readable(casePayload.case_id, "New case")}</strong><small>{caseType === "synthetic" ? "Synthetic demonstration" : "De-identified clinical case"}</small></div></div>
           <div className="case-nav-meta"><div><span>Program</span><strong>Hematologic</strong></div><div><span>Priority</span><strong>Routine board</strong></div></div>
-          <div className="sidebar-note"><span>Research boundary</span><p>Use synthetic or fully de-identified cases only.</p></div>
+          <div className="sidebar-note"><span>Research boundary</span><p>{syntheticOnly ? "Synthetic teaching case only. Do not enter patient information." : "Use synthetic or fully de-identified cases only."}</p></div>
         </nav>
 
         {workspace === "home" ? (
-          <ProductHome connection={connection} onStartSynthetic={() => resetCaseSession("guided")} onStartDeidentified={() => resetCaseSession("upload")} onOpenCase={(item) => void openSavedCase(item)} />
+          <ProductHome connection={connection} syntheticOnly={syntheticOnly} onStartSynthetic={() => resetCaseSession("guided")} onStartDeidentified={() => resetCaseSession("upload")} onOpenCase={(item) => void openSavedCase(item)} />
         ) : workspace === "research" ? (
           <ResearchConsole connection={connection} />
         ) : (
@@ -666,11 +670,11 @@ function ProductWorkspace() {
                   <CaseVersionWorkspace connection={connection} casePayload={casePayload} rawExtraction={rawExtraction} workflow={workflow} evidenceReview={evidenceReview} humanDecision={boardDecisionRecord} pendingUpdate={pendingUpdate} onApplyUpdate={applyCaseUpdate} onVersionSaved={(version) => { setLastSavedVersion(version); setPendingUpdate(null); setInspectorTab("audit"); }} onClose={() => setShowVersions(false)} />
                 ) : (
                   <>
-                    {workflowError && <div className="workflow-error" role="alert"><strong>FastAPI connection needed</strong><span>{workflowError} Start the local Python service and try again.</span><button type="button" onClick={() => void runWorkflow()}>Retry</button></div>}
+                    {workflowError && <div className="workflow-error" role="alert"><strong>FastAPI connection needed</strong><span>{workflowError} {syntheticOnly ? "The free evaluation service may be waking up. Wait about one minute, then retry." : "Start the local Python service and try again."}</span><button type="button" onClick={() => void runWorkflow()}>Retry</button></div>}
                     {pendingUpdate && <div className="workflow-update-notice" role="status"><strong>New information is active</strong><span>{pendingUpdate.changeSummary} Prior decisions remain historical and will not be carried forward.</span></div>}
                     <header className="section-heading"><p className="micro-label">{content.kicker}</p><h2>{content.title}</h2><p>{content.description}</p></header>
                     <div className="patient-strip" aria-label="Patient snapshot"><div><span>Age / sex</span><strong>{readable(casePayload.age)} · {readable(casePayload.sex)}</strong></div><div><span>Diagnosis</span><strong>{readable(diagnosis.value)}</strong></div><div><span>Disease state</span><strong>{readable(diseaseState.value)}</strong></div><div><span>Performance</span><strong>ECOG {readable(performance.value)}</strong></div><div><span>Molecular</span><strong>{molecular.gene ? `${readable(molecular.gene)}-${readable(molecular.alteration_type)}` : "Not represented"}</strong></div></div>
-                    <StagePanel stage={stage} workflow={workflow} intakeConfirmed={intakeConfirmed} intakeSnapshot={intakeSnapshot} confirmedFacts={intakeFacts} onIntakeDirty={markIntakeDirty} onIntakeConfirmed={confirmIntake} casePayload={casePayload} connection={connection} evidenceReview={evidenceReview} onEvidenceDirty={markEvidenceDirty} onEvidenceCommissioned={confirmEvidence} onOpenEvidence={() => setStage("evidence")} running={running} onRunAnalysis={() => void runWorkflow()} boardDecisionRecord={boardDecisionRecord} onBoardDecisionDirty={() => setBoardDecisionRecord(null)} onBoardDecisionRecorded={(record) => { setBoardDecisionRecord(record); setInspectorTab("audit"); }} intakeMode={intakeMode} intakeKey={intakeKey} />
+                    <StagePanel stage={stage} workflow={workflow} intakeConfirmed={intakeConfirmed} intakeSnapshot={intakeSnapshot} confirmedFacts={intakeFacts} onIntakeDirty={markIntakeDirty} onIntakeConfirmed={confirmIntake} casePayload={casePayload} connection={connection} evidenceReview={evidenceReview} onEvidenceDirty={markEvidenceDirty} onEvidenceCommissioned={confirmEvidence} onOpenEvidence={() => setStage("evidence")} running={running} onRunAnalysis={() => void runWorkflow()} boardDecisionRecord={boardDecisionRecord} onBoardDecisionDirty={() => setBoardDecisionRecord(null)} onBoardDecisionRecorded={(record) => { setBoardDecisionRecord(record); setInspectorTab("audit"); }} intakeMode={intakeMode} intakeKey={intakeKey} syntheticOnly={syntheticOnly} />
                   </>
                 )}
               </section>

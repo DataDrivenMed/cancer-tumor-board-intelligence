@@ -49,6 +49,7 @@ from orchestration.context import WorkflowContext
 from orchestration.workflow import run_workflow
 from services.document_parser import parse_upload
 from services.deidentification import screen_deidentified_text
+from services.deployment_profile import allowed_case_types, synthetic_evaluation_enabled, validate_case_boundary
 from services.evidence_commissioning_api import (
     build_commissioned_context,
     collect_commissioning_snapshot,
@@ -71,7 +72,6 @@ from services.workflow_evaluation import evaluate_workflow_package, summarize_wo
 
 API_VERSION = "0.6.0"
 SERVICE_NAME = "tumor-board-intelligence-api"
-PUBLIC_CASE_TYPES = {"synthetic", "deidentified_research"}
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _SUPPORTED_DOCUMENT_TYPES = {".pdf", ".docx", ".txt", ".md"}
 _MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
@@ -134,6 +134,13 @@ def get_case_version_store() -> SQLiteCaseVersionStore:
 def _request_id(request: Request) -> str:
     value = getattr(request.state, "request_id", "")
     return value if value else uuid4().hex
+
+
+def _enforce_case_boundary(case) -> None:
+    try:
+        validate_case_boundary(case)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 def _principal(request: Request):
@@ -257,6 +264,15 @@ def create_app() -> FastAPI:
     ) -> CaseExtractionResponse:
         """Parse and extract one transient synthetic or de-identified source document."""
 
+        if synthetic_evaluation_enabled():
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Document upload is disabled in the synthetic evaluation. "
+                    "Use the bundled guided AML source packet."
+                ),
+            )
+
         suffix = Path(payload.document.filename).suffix.lower()
         if suffix not in _SUPPORTED_DOCUMENT_TYPES:
             raise HTTPException(
@@ -359,14 +375,7 @@ def create_app() -> FastAPI:
         request: Request,
         context: WorkflowContext = Depends(get_workflow_context),
     ) -> WorkflowRunResponse:
-        if payload.case.case_type not in PUBLIC_CASE_TYPES:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "This public research API accepts only synthetic or fully de-identified research cases. "
-                    "Clinical and prospective-silent use requires separate institutional governance and deployment."
-                ),
-            )
+        _enforce_case_boundary(payload.case)
 
         request_id = _request_id(request)
         result = run_workflow(
@@ -394,11 +403,7 @@ def create_app() -> FastAPI:
         request: Request,
         collector: Callable = Depends(get_evidence_collector),
     ) -> EvidenceCandidateSetResponse:
-        if payload.case.case_type not in PUBLIC_CASE_TYPES:
-            raise HTTPException(
-                status_code=403,
-                detail="Evidence commissioning accepts only synthetic or fully de-identified research cases.",
-            )
+        _enforce_case_boundary(payload.case)
         snapshot = collector(payload.case, mode=payload.mode)
         return EvidenceCandidateSetResponse(
             request_id=_request_id(request),
@@ -440,11 +445,7 @@ def create_app() -> FastAPI:
         request: Request,
         collector: Callable = Depends(get_evidence_collector),
     ) -> WorkflowRunResponse:
-        if payload.case.case_type not in PUBLIC_CASE_TYPES:
-            raise HTTPException(
-                status_code=403,
-                detail="This public research API accepts only synthetic or fully de-identified research cases.",
-            )
+        _enforce_case_boundary(payload.case)
         snapshot = collector(payload.case, mode=payload.evidence_commission.mode)
         try:
             context, receipt = build_commissioned_context(
@@ -488,10 +489,19 @@ def create_app() -> FastAPI:
         versions and later amendments are intentionally reserved for Phase 8.
         """
 
-        if payload.case_type not in PUBLIC_CASE_TYPES:
+        if payload.case_type not in allowed_case_types():
             raise HTTPException(
                 status_code=403,
-                detail="Decision capture accepts only synthetic or fully de-identified research cases.",
+                detail=(
+                    "Decision capture is limited to the synthetic teaching case in this evaluation."
+                    if synthetic_evaluation_enabled()
+                    else "Decision capture accepts only synthetic or fully de-identified research cases."
+                ),
+            )
+        if synthetic_evaluation_enabled() and payload.case_id != "TBI-AML-042":
+            raise HTTPException(
+                status_code=403,
+                detail="Decision capture is limited to the bundled AML teaching case.",
             )
         receipt = build_human_decision_receipt(payload)
         return HumanDecisionRecordResponse(
@@ -512,11 +522,7 @@ def create_app() -> FastAPI:
         request: Request,
         store: SQLiteCaseVersionStore = Depends(get_case_version_store),
     ) -> CaseVersionSaveResponse:
-        if payload.case.case_type not in PUBLIC_CASE_TYPES:
-            raise HTTPException(
-                status_code=403,
-                detail="Case versioning accepts only synthetic or fully de-identified research cases.",
-            )
+        _enforce_case_boundary(payload.case)
         try:
             version, created = store.save_version(
                 case=jsonable_encoder(payload.case),
@@ -605,11 +611,7 @@ def create_app() -> FastAPI:
         )
         if not base:
             raise HTTPException(status_code=404, detail="The selected base version was not found.")
-        if payload.updated_case.case_type not in PUBLIC_CASE_TYPES:
-            raise HTTPException(
-                status_code=403,
-                detail="Case updates accept only synthetic or fully de-identified research cases.",
-            )
+        _enforce_case_boundary(payload.updated_case)
         try:
             assessment = assess_case_update(base["case"], jsonable_encoder(payload.updated_case))
         except ValueError as exc:
@@ -637,11 +639,7 @@ def create_app() -> FastAPI:
     ) -> WorkflowRunResponse:
         if not payload.update_attested:
             raise HTTPException(status_code=409, detail="Human update attestation is required before a targeted rerun.")
-        if payload.case.case_type not in PUBLIC_CASE_TYPES:
-            raise HTTPException(
-                status_code=403,
-                detail="Targeted reruns accept only synthetic or fully de-identified research cases.",
-            )
+        _enforce_case_boundary(payload.case)
         base = store.get_version(
             payload.base_version_id,
             case_id=payload.case.case_id,

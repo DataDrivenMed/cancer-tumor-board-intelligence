@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from services.deployment_profile import synthetic_evaluation_enabled
+
 
 def _enabled(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
@@ -43,7 +45,16 @@ def release_readiness_snapshot() -> dict[str, Any]:
         _check("durable_state_store", "resilience", "production_research", bool(os.getenv("DATABASE_URL", "").strip()), "A durable PostgreSQL case store is configured.", "Set DATABASE_URL to the managed PostgreSQL connection string and test backup restoration."),
     ]
     local_checks = [
-        _check("research_boundary", "scope", "local_research", True, "The API accepts only synthetic or fully de-identified research case types.", ""),
+        _check(
+            "research_boundary",
+            "scope",
+            "local_research",
+            True,
+            "The API is restricted to the controlled synthetic teaching case."
+            if synthetic_evaluation_enabled()
+            else "The API accepts only synthetic or fully de-identified research case types.",
+            "",
+        ),
         _check("fail_closed_defaults", "safety", "local_research", True, "Evidence and model integrations fail closed when they are unavailable.", ""),
         _check("request_isolation", "runtime", "local_research", True, "Workflow dependencies are created per request.", ""),
         _check("deidentification_screen", "privacy", "local_research", True, "De-identified uploads require attestation and a secondary identifier screen; original files are not retained.", ""),

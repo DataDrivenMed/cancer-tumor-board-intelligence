@@ -32,6 +32,7 @@ type Props = {
   confirmed: boolean;
   initialIntake: ConfirmedIntake | null;
   initialMode?: "guided" | "upload";
+  syntheticOnly?: boolean;
   onDirty: () => void;
   onConfirmed: (result: ConfirmedIntake) => void;
 };
@@ -163,7 +164,7 @@ function event(action: string, detail: string): IntakeAuditEvent {
   };
 }
 
-export function CaseIntakeReview({ confirmed, initialIntake, initialMode = "guided", onDirty, onConfirmed }: Props) {
+export function CaseIntakeReview({ confirmed, initialIntake, initialMode = "guided", syntheticOnly = false, onDirty, onConfirmed }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const newUpload = !initialIntake && initialMode === "upload";
   const initialDocuments = initialIntake?.documents || (newUpload ? [] : guidedDocuments);
@@ -341,17 +342,17 @@ export function CaseIntakeReview({ confirmed, initialIntake, initialMode = "guid
         <div className="intake-mode-copy">
           <p className="micro-label">Phase 4 source intake</p>
           <h3>Choose how to build the represented case</h3>
-          <p>Source documents are processed transiently and are not retained. Only properly de-identified clinical information may be uploaded.</p>
+          <p>{syntheticOnly ? "This hosted evaluation uses only the controlled synthetic AML packet. Patient documents and de-identified clinical uploads are disabled." : "Source documents are processed transiently and are not retained. Only properly de-identified clinical information may be uploaded."}</p>
         </div>
         <div className="intake-mode-options" role="group" aria-label="Intake method">
           <button type="button" className={mode === "guided" ? "active" : ""} onClick={loadGuidedPacket}>
             <span>01</span><strong>Guided synthetic packet</strong><small>Always available for a safe demonstration</small>
           </button>
-          <button type="button" className={mode === "upload" ? "active" : ""} onClick={() => setMode("upload")}>
+          {!syntheticOnly && <button type="button" className={mode === "upload" ? "active" : ""} onClick={() => setMode("upload")}>
             <span>02</span><strong>Local document extraction</strong><small>PDF, DOCX, TXT, or Markdown</small>
-          </button>
+          </button>}
         </div>
-        {mode === "upload" && (
+        {!syntheticOnly && mode === "upload" && (
           <div className="upload-workbench">
             <input
               ref={fileInput}

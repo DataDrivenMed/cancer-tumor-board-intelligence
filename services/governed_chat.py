@@ -4,6 +4,7 @@ import json
 import os
 from typing import Any
 
+from orchestration.context import WorkflowContext
 from services.model_gateway import ModelGatewayError, structured_json_response_raw
 
 
@@ -108,7 +109,13 @@ def _question_channels(question: str) -> list[str]:
     return list(dict.fromkeys(channels))
 
 
-def _consult_specialists(question: str, result: dict[str, Any], case: Any) -> tuple[dict[str, Any], list[str]]:
+def _consult_specialists(
+    question: str,
+    result: dict[str, Any],
+    case: Any,
+    *,
+    context: WorkflowContext | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     outputs = dict(result.get("specialist_outputs", {}) or {})
     consulted: list[str] = []
     if case is None:
@@ -118,10 +125,14 @@ def _consult_specialists(question: str, result: dict[str, Any], case: Any) -> tu
     if not requested:
         return outputs, consulted
 
-    try:
-        from orchestration.workflow import AGENT_REGISTRY
-    except Exception:
-        return outputs, consulted
+    if context is not None:
+        agent_registry = context.agent_registry
+    else:
+        try:
+            from orchestration.workflow import AGENT_REGISTRY
+        except Exception:
+            return outputs, consulted
+        agent_registry = AGENT_REGISTRY
 
     labels = {
         "guideline": "Guideline Agent",
@@ -139,7 +150,7 @@ def _consult_specialists(question: str, result: dict[str, Any], case: Any) -> tu
         if existing is not None and existing_status not in {"", "source_unavailable", "not selected"}:
             consulted.append(labels.get(key, key))
             continue
-        agent = AGENT_REGISTRY.get(key)
+        agent = agent_registry.get(key)
         if agent is None:
             continue
         try:
@@ -309,6 +320,7 @@ def answer_governed_question(
     case: Any,
     *,
     history: list[dict[str, str]] | None = None,
+    context: WorkflowContext | None = None,
 ) -> dict[str, Any]:
     """Reason across governed case/evidence objects without creating an independent care recommendation.
 
@@ -317,7 +329,12 @@ def answer_governed_question(
     workflow. A reasoning model is used only as a synthesis layer over the supplied record.
     """
 
-    outputs, dynamically_consulted = _consult_specialists(question, result, case)
+    outputs, dynamically_consulted = _consult_specialists(
+        question,
+        result,
+        case,
+        context=context,
+    )
     working_result = dict(result)
     working_result["specialist_outputs"] = outputs
 

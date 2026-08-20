@@ -12,6 +12,7 @@ from agents.translational import TranslationalBiologyAgent
 from schemas.molecular import MolecularEvidenceStore
 from schemas.safety import SafetyEvidenceStore
 from schemas.translational import TranslationalEvidenceStore
+from orchestration.context import WorkflowContext
 from services.clinicaltrials_client import ClinicalTrialsClient
 from services.production_evidence_config import EvidenceConfigStatus, bool_env
 from services.pubmed_client import PubMedClient
@@ -330,21 +331,19 @@ def _fallback_registry() -> dict[str, Any]:
     }
 
 
-def configure_workflow_runtime(
+def build_workflow_context(
     *,
     guideline_store_override: GuidelineEvidenceStore | None = None,
     molecular_store_override: MolecularEvidenceStore | None = None,
     safety_store_override: SafetyEvidenceStore | None = None,
     translational_store_override: TranslationalEvidenceStore | None = None,
-) -> dict[str, Any]:
-    """Install deployment/session-specific agents into the existing core orchestrator.
+) -> WorkflowContext:
+    """Build isolated dependencies for one case workflow or browser session.
 
     Startup must never convert an optional evidence-source problem into a full product
     outage. If initialization fails unexpectedly, a fail-closed empty registry is
-    installed and the non-secret error type/message is returned in runtime status.
+    returned with a non-secret runtime status. No module-level registry is mutated.
     """
-    from orchestration import workflow
-
     try:
         registry, status = build_runtime_registry(
             guideline_store_override=guideline_store_override,
@@ -379,5 +378,20 @@ def configure_workflow_runtime(
             },
         }
 
-    workflow.AGENT_REGISTRY = registry
-    return status
+    return WorkflowContext(agent_registry=registry, runtime_status=status)
+
+
+def configure_workflow_runtime(
+    *,
+    guideline_store_override: GuidelineEvidenceStore | None = None,
+    molecular_store_override: MolecularEvidenceStore | None = None,
+    safety_store_override: SafetyEvidenceStore | None = None,
+    translational_store_override: TranslationalEvidenceStore | None = None,
+) -> WorkflowContext:
+    """Backward-compatible name for building a request-specific workflow context."""
+    return build_workflow_context(
+        guideline_store_override=guideline_store_override,
+        molecular_store_override=molecular_store_override,
+        safety_store_override=safety_store_override,
+        translational_store_override=translational_store_override,
+    )

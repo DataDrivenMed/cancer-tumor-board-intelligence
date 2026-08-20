@@ -6,6 +6,7 @@ from typing import Any
 import streamlit as st
 
 from services.governed_chat import answer_governed_question
+from orchestration.context import WorkflowContext
 
 
 def _txt(value: Any, default: str = "") -> str:
@@ -58,7 +59,13 @@ def _render_answer(row: dict[str, Any]) -> None:
     st.markdown('</div></div>', unsafe_allow_html=True)
 
 
-def render_governed_chat(result: dict[str, Any], case: Any, *, key_prefix: str = "brief") -> None:
+def render_governed_chat(
+    result: dict[str, Any],
+    case: Any,
+    *,
+    key_prefix: str = "brief",
+    context: WorkflowContext | None = None,
+) -> None:
     chat_css()
     st.markdown('<div class="tb-chat-shell"><div class="tb-chat-head"><strong>Ask Tumor Board</strong><span>Use this panel to ask follow-up questions about the current structured case and the evidence that the governed workflow actually produced. It is not a general oncology chatbot and does not create a separate treatment recommendation from unrestricted model memory.</span></div><div class="tb-chat-note"><strong>Good questions:</strong> What is the best-supported strategy and why? What information is missing? Which trials surfaced? What did the Challenge Review question? What could change the decision?</div></div>', unsafe_allow_html=True)
 
@@ -79,7 +86,13 @@ def render_governed_chat(result: dict[str, Any], case: Any, *, key_prefix: str =
         for i, prompt in enumerate(prompts):
             with cols[i % 2]:
                 if st.button(prompt, key=f"{key_prefix}_smart_prompt_{i}", use_container_width=True):
-                    response = answer_governed_question(prompt, result, case, history=[])
+                    response = answer_governed_question(
+                        prompt,
+                        result,
+                        case,
+                        history=[],
+                        context=context,
+                    )
                     response["question"] = prompt
                     st.session_state[hist_key].append(response)
                     st.rerun()
@@ -91,7 +104,13 @@ def render_governed_chat(result: dict[str, Any], case: Any, *, key_prefix: str =
     if question:
         history = _history_for_model(st.session_state[hist_key])
         with st.spinner("Reviewing the governed case and relevant specialist outputs..."):
-            response = answer_governed_question(question, result, case, history=history)
+            response = answer_governed_question(
+                question,
+                result,
+                case,
+                history=history,
+                context=context,
+            )
         response["question"] = question
         st.session_state[hist_key].append(response)
         st.rerun()

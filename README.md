@@ -59,7 +59,20 @@ De-identified narrative / document / synthetic case
 
 The system does not use agent voting as a proxy for truth. Required evidence-channel failures can prevent consensus. Trial matching is not eligibility. Biological plausibility is not clinical actionability. Failed verification does not propagate downstream. A disease program may use the common platform even when a disease-specific evidence package is unavailable, but the affected evidence channel then fails closed rather than generating a claim from model memory.
 
-## Executive clinician workspace
+## Private clinician product
+
+The production interface lives in [`web/`](web/) and uses Next.js, React, and TypeScript. It provides an authenticated home screen with two explicit entry paths:
+
+1. a guided synthetic AML case that teaches the complete workflow
+2. a real clinical case path that accepts only information de-identified before upload
+
+The Next.js server acts as a backend-for-frontend. It keeps the OIDC session in secure, HTTP-only cookies and forwards authenticated API requests to FastAPI. FastAPI independently verifies the access token and scopes every saved case query to the verified organization. PostgreSQL is used in production; SQLite remains the local development fallback.
+
+The original uploaded document is processed transiently and is not retained. A required user attestation and deterministic identifier screen add safeguards, but do not certify HIPAA de-identification.
+
+See [`docs/PRODUCTION_RELEASE_GUIDE.md`](docs/PRODUCTION_RELEASE_GUIDE.md) for the beginner-oriented staging and release process and [`docs/DEIDENTIFIED_DATA_BOUNDARY.md`](docs/DEIDENTIFIED_DATA_BOUNDARY.md) for the allowed-data boundary.
+
+## Legacy Streamlit clinician workspace
 
 `app/main.py` opens the clinician-facing workspace. The normal interface uses five stages:
 
@@ -133,7 +146,7 @@ ClinicalTrials.gov matching applies deterministic disease context, recruitment s
 
 Guideline, molecular, safety, and optional translational evidence can be supplied at deployment without changing source code. See [`docs/PRODUCTION_CONFIGURATION.md`](docs/PRODUCTION_CONFIGURATION.md).
 
-Session evidence approvals are intentionally ephemeral in the current research release. Durable institutional evidence governance should use reviewed deployment packages and an approved persistence layer rather than browser-session state.
+Evidence approvals and case decisions can be stored as immutable organization-scoped versions in PostgreSQL. Reviewed deployment packages remain the correct mechanism for durable institutional evidence governance.
 
 ## Safety invariants
 
@@ -188,6 +201,27 @@ source .venv/bin/activate
 pip install -r requirements.txt
 streamlit run app/main.py
 ```
+
+The Phase 1 FastAPI service can be run in a second terminal:
+
+```bash
+uvicorn api.main:app --reload --port 8000
+```
+
+Open `http://127.0.0.1:8000/docs` to inspect and test the API contract. The API remains
+limited to synthetic or fully de-identified research cases. See
+[`docs/PHASE_1_FASTAPI_BOUNDARY.md`](docs/PHASE_1_FASTAPI_BOUNDARY.md) for the original
+service boundary and [`docs/PHASE_4_DOCUMENT_EXTRACTION_API.md`](docs/PHASE_4_DOCUMENT_EXTRACTION_API.md)
+for transient document extraction and provenance review. Phase 5's stateless evidence-admission
+contract is documented in [`docs/PHASE_5_EVIDENCE_COMMISSIONING_API.md`](docs/PHASE_5_EVIDENCE_COMMISSIONING_API.md).
+The Phase 6 clinician analysis fields and synthesis permissions are documented in
+[`docs/PHASE_6_GOVERNED_ANALYSIS_CONTRACT.md`](docs/PHASE_6_GOVERNED_ANALYSIS_CONTRACT.md).
+The Phase 7 stateless clinician-judgment and board-decision receipt is documented in
+[`docs/PHASE_7_HUMAN_DECISION_CONTRACT.md`](docs/PHASE_7_HUMAN_DECISION_CONTRACT.md).
+The Phase 8 append-only case-version store, update impact assessment, and targeted-rerun
+rules are documented in [`docs/PHASE_8_CASE_VERSIONING_CONTRACT.md`](docs/PHASE_8_CASE_VERSIONING_CONTRACT.md).
+The Phase 9 deterministic evaluation, HTTP security, and release-readiness contract is documented in
+[`docs/PHASE_9_RELEASE_READINESS_CONTRACT.md`](docs/PHASE_9_RELEASE_READINESS_CONTRACT.md).
 
 ## Test
 

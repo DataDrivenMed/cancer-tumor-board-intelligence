@@ -3,6 +3,7 @@ from __future__ import annotations
 from schemas.agent import FinalDecision, RedTeamFinding
 from schemas.case import CancerTumorBoardCase
 from schemas.tumor_board_brief import BriefItem, BriefSection, TumorBoardIntelligenceBrief
+from orchestration.context import WorkflowContext
 from services.audit import audit_event
 from services.quality import inspect_case
 from services.semantic_integrity import inspect_semantic_integrity, semantic_integrity_passes
@@ -194,7 +195,20 @@ def _abstain_result(
     }
 
 
-def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = None) -> dict:
+def run_workflow(
+    case: CancerTumorBoardCase,
+    *,
+    raw_extraction: dict | None = None,
+    context: WorkflowContext | None = None,
+    reuse_specialist_outputs: dict[str, object] | None = None,
+    rerun_agents: set[str] | None = None,
+) -> dict:
+    """Run the governed workflow with request-specific dependencies when supplied.
+
+    ``context`` is the production-safe path for web requests. The module registry
+    remains only as a backward-compatible default for frozen tests and legacy
+    research pages that do not install session-specific evidence overrides.
+    """
     audit = [audit_event("workflow_started", case.case_id)]
 
     semantic_findings = inspect_semantic_integrity(case, raw_extraction)
@@ -317,12 +331,23 @@ def run_workflow(case: CancerTumorBoardCase, *, raw_extraction: dict | None = No
 
     specialist_outputs = {}
     for agent_id in routing.selected_agents:
-        output = AGENT_REGISTRY[agent_id].run(case)
+        may_reuse = (
+            reuse_specialist_outputs is not None
+            and rerun_agents is not None
+            and agent_id not in rerun_agents
+            and agent_id in reuse_specialist_outputs
+        )
+        if may_reuse:
+            output = reuse_specialist_outputs[agent_id]
+            audit.append(audit_event("agent_output_reused", f"{agent_id}; source=prior_case_version"))
+        else:
+            agent = context.agent(agent_id) if context is not None else AGENT_REGISTRY[agent_id]
+            output = agent.run(case)
+            status = getattr(output, "status", "unknown")
+            if hasattr(status, "value"):
+                status = status.value
+            audit.append(audit_event("agent_complete", f"{agent_id}; status={status}"))
         specialist_outputs[agent_id] = output
-        status = getattr(output, "status", "unknown")
-        if hasattr(status, "value"):
-            status = status.value
-        audit.append(audit_event("agent_complete", f"{agent_id}; status={status}"))
 
     red_team_report = run_clinical_red_team(case, routing, specialist_outputs)
     audit.append(

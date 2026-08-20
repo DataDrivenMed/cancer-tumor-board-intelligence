@@ -31,6 +31,7 @@ class FDALabelSectionCandidate:
     text: str
     source_url: str
     accessed_date: date
+    synthetic: bool = False
 
 
 @dataclass(frozen=True)
@@ -230,7 +231,7 @@ def build_attested_safety_store(
                 source_excerpt=excerpt,
                 source_verified=True,
                 human_verified=True,
-                synthetic=False,
+                synthetic=candidate.synthetic,
                 therapy_terms=list(attestation.therapy_terms),
                 disease_terms=list(attestation.disease_terms),
                 trigger_terms=list(attestation.trigger_terms),

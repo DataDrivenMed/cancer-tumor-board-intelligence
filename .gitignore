@@ -5,3 +5,7 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 .DS_Store
+.local/
+web/.next/
+web/node_modules/
+web/.env.local

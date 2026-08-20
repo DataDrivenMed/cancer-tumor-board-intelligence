@@ -29,7 +29,7 @@ from services.model_gateway import ModelGatewayError
 from services.oncology_programs import PROGRAM_BY_ID
 from services.pathway_validation import get_pathway_validation_status
 from services.tumor_board_pdf import build_tumor_board_pdf
-from services.runtime_agents import configure_workflow_runtime
+from services.runtime_agents import build_workflow_context
 from app.faculty_ui import (
     faculty_css, render_case_context, render_feedback,
     render_molecular_table, render_thirty_second_view, render_treatment_timeline,
@@ -210,7 +210,7 @@ def confirm_case_representation(case: CancerTumorBoardCase) -> CancerTumorBoardC
 
 def reset() -> None:
     for key in [
-        "stage", "case", "raw_extraction", "result", "extraction_package", "runtime_status",
+        "stage", "case", "raw_extraction", "result", "extraction_package", "runtime_status", "workflow_context",
         "evidence_candidates", "evidence_candidate_error", "molecular_store_override",
         "safety_store_override", "guideline_store_override", "brief_tb_chat", "evidence_tb_chat", "analysis_tb_chat",
     ]: st.session_state.pop(key, None)
@@ -219,7 +219,7 @@ def reset() -> None:
 
 DEFAULTS = {
     "stage":"intake", "case":None, "raw_extraction":None, "result":None,
-    "extraction_package":None, "runtime_status":None, "evidence_candidates":None,
+    "extraction_package":None, "runtime_status":None, "workflow_context":None, "evidence_candidates":None,
     "evidence_candidate_error":None, "molecular_store_override":None,
     "safety_store_override":None, "guideline_store_override":None,
 }
@@ -227,11 +227,12 @@ for key, default in DEFAULTS.items():
     if key not in st.session_state: st.session_state[key] = default
 
 sync_runtime_env()
-st.session_state.runtime_status = configure_workflow_runtime(
+st.session_state.workflow_context = build_workflow_context(
     guideline_store_override=st.session_state.guideline_store_override,
     molecular_store_override=st.session_state.molecular_store_override,
     safety_store_override=st.session_state.safety_store_override,
 )
+st.session_state.runtime_status = st.session_state.workflow_context.status_snapshot()
 
 faculty_css()
 topbar(); top_navigation("workspace"); nav(st.session_state.stage)
@@ -345,7 +346,12 @@ elif st.session_state.stage == "evidence":
         st.markdown('<div class="fx-panel-title">Evidence channel readiness</div><div class="fx-panel-sub">Guidelines, molecular, and safety are commissioned here. Literature, trials, and translational channels run during analysis and remain independently labeled.</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="fx-status-grid"><div class="fx-status"><strong>Guidelines</strong><span>{escape(human(guideline_report.status))}</span></div><div class="fx-status"><strong>Molecular</strong><span>{len(candidates.molecular_records)} candidate record(s)</span></div><div class="fx-status"><strong>Safety</strong><span>{len(candidates.safety_records)} candidate record(s)</span></div></div>', unsafe_allow_html=True)
     with chat:
-        render_governed_chat({"specialist_outputs": evidence_chat_outputs}, case, key_prefix="evidence")
+        render_governed_chat(
+            {"specialist_outputs": evidence_chat_outputs},
+            case,
+            key_prefix="evidence",
+            context=st.session_state.workflow_context,
+        )
     for warning in candidates.warnings: st.warning(warning)
     if candidates.candidate_therapies:
         st.caption("Guideline-candidate therapy concepts sent to safety-source retrieval: " + ", ".join(candidates.candidate_therapies))
@@ -383,13 +389,15 @@ elif st.session_state.stage == "evidence":
             if (molecular_ids or safety_indices) and not attest:
                 st.error("Confirm the evidence-review attestation before approved records can be marked human-verified.")
             else:
+                st.session_state.guideline_store_override = guideline_store
                 st.session_state.molecular_store_override = build_approved_molecular_store(candidates.molecular_records, molecular_ids)
                 st.session_state.safety_store_override = build_approved_safety_store(candidates.safety_records, safety_indices)
-                st.session_state.runtime_status = configure_workflow_runtime(
+                st.session_state.workflow_context = build_workflow_context(
                     guideline_store_override=guideline_store,
                     molecular_store_override=st.session_state.molecular_store_override,
                     safety_store_override=st.session_state.safety_store_override,
                 )
+                st.session_state.runtime_status = st.session_state.workflow_context.status_snapshot()
                 st.session_state.stage="analysis"; st.rerun()
 
 elif st.session_state.stage == "analysis":
@@ -397,12 +405,17 @@ elif st.session_state.stage == "analysis":
     if st.session_state.result is None:
         with st.spinner("Running deterministic gates and configured evidence channels..."):
             try:
-                configure_workflow_runtime(
+                st.session_state.workflow_context = build_workflow_context(
                     guideline_store_override=st.session_state.guideline_store_override,
                     molecular_store_override=st.session_state.molecular_store_override,
                     safety_store_override=st.session_state.safety_store_override,
                 )
-                st.session_state.result = run_workflow(st.session_state.case, raw_extraction=st.session_state.raw_extraction)
+                st.session_state.runtime_status = st.session_state.workflow_context.status_snapshot()
+                st.session_state.result = run_workflow(
+                    st.session_state.case,
+                    raw_extraction=st.session_state.raw_extraction,
+                    context=st.session_state.workflow_context,
+                )
             except Exception as exc:
                 st.error(f"The workflow stopped safely because analysis could not complete: {exc}")
                 if st.button("Return to evidence review"): st.session_state.stage="evidence"; st.rerun()
@@ -417,7 +430,12 @@ elif st.session_state.stage == "analysis":
         if st.button("Open decision brief", type="primary", use_container_width=True):
             st.session_state.stage = "brief"; st.rerun()
     with a2:
-        render_governed_chat(analysis_result, st.session_state.case, key_prefix="analysis")
+        render_governed_chat(
+            analysis_result,
+            st.session_state.case,
+            key_prefix="analysis",
+            context=st.session_state.workflow_context,
+        )
 
 else:
     result = st.session_state.result or {}
@@ -431,7 +449,12 @@ else:
         st.markdown(f'<div class="fx-decision-banner"><div class="fx-lbl">Decision state</div><h2>{escape(human(decision))}</h2><p>{escape(txt(val(consensus,"summary",val(final,"abstention_reason","Decision-support state generated from current evidence."))))}</p></div>', unsafe_allow_html=True)
         st.markdown(f'<div class="fx-missing"><strong>What is missing?</strong><p>{escape(txt(val(missing,"summary","No missing-information summary is available.")))}</p></div>', unsafe_allow_html=True)
     with chat:
-        render_governed_chat(result, case, key_prefix="brief")
+        render_governed_chat(
+            result,
+            case,
+            key_prefix="brief",
+            context=st.session_state.workflow_context,
+        )
     l,r = st.columns([.92,1.58], gap="large")
     with l:
         st.markdown(f'<div class="decision"><div class="decision-label">Decision state</div><div class="decision-title">{escape(human(decision))}</div>{chip(val(consensus,"status",decision))}<div class="ws-copy" style="margin-top:8px">{escape(txt(val(consensus,"summary",val(final,"abstention_reason","Decision-support state generated from current evidence."))))}</div></div>', unsafe_allow_html=True)

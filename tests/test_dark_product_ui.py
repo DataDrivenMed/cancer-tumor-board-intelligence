@@ -1,15 +1,15 @@
 from pathlib import Path
 
 
-def test_shared_warm_editorial_theme_is_wired():
+def test_shared_midnight_editorial_theme_is_wired():
     theme = Path("app/xai_theme.py").read_text(encoding="utf-8")
     faculty = Path("app/faculty_ui.py").read_text(encoding="utf-8")
     workspace = Path("app/pages/00_Clinical_Workspace.py").read_text(encoding="utf-8")
     overview = Path("app/overview_ui.py").read_text(encoding="utf-8")
-    assert "--x-canvas:#f7f7f4" in theme
-    assert "--x-primary:#f54e00" in theme
-    assert "--x-thinking:#dfa88f" in theme
-    assert "WHAT TO DO HERE" in theme
+    assert "--x-canvas:#12100f" in theme
+    assert "--x-primary:#d9915f" in theme
+    assert "--x-thinking:#d9915f" in theme
+    assert "Midnight Editorial" in theme
     assert "inject_xai_theme()" in faculty
     assert "inject_xai_theme()" in workspace
     assert "inject_xai_theme()" in overview

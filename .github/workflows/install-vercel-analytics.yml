@@ -1,0 +1,67 @@
+name: Install Vercel Analytics
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/install-vercel-analytics.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Vercel Web Analytics
+        working-directory: web
+        run: npm install @vercel/analytics@2.0.1 --save
+
+      - name: Add Analytics to root layout
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'web/app/layout.tsx';
+          let source = fs.readFileSync(path, 'utf8');
+
+          if (!source.includes('@vercel/analytics/next')) {
+            source = source.replace(
+              'import type { Metadata } from "next";\n',
+              'import type { Metadata } from "next";\nimport { Analytics } from "@vercel/analytics/next";\n'
+            );
+          }
+
+          if (!source.includes('<Analytics />')) {
+            source = source.replace(
+              '<body className="antialiased">{children}</body>',
+              '<body className="antialiased">\n        {children}\n        <Analytics />\n      </body>'
+            );
+          }
+
+          fs.writeFileSync(path, source);
+          NODE
+
+      - name: Verify web application
+        working-directory: web
+        run: |
+          npm run lint
+          npm run test:source
+          npm run build
+
+      - name: Commit installation
+        run: |
+          rm .github/workflows/install-vercel-analytics.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/package.json web/package-lock.json web/app/layout.tsx .github/workflows/install-vercel-analytics.yml
+          git commit -m "feat: add Vercel Web Analytics"
+          git push
